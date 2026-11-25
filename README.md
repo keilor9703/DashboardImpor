@@ -45,6 +45,17 @@ npm install
 npm run dev                                    # http://localhost:5173
 ```
 
+**En Windows (PowerShell)**, use estos comandos en el backend (PowerShell 5 no acepta `&&`):
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1          # si lo bloquea: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+pip install -r requirements.txt
+Copy-Item .env.example .env
+uvicorn app.main:app --reload --port 8000
+```
+
 Con Docker: `cp backend/.env.example backend/.env && docker compose up --build` → http://localhost:8080
 
 Pruebas del backend: `cd backend && pytest`
