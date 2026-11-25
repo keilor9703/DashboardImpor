@@ -1,0 +1,16 @@
+services:
+  api:
+    build: ./backend
+    env_file: ./backend/.env
+    restart: unless-stopped
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_AZURE_CLIENT_ID: ${VITE_AZURE_CLIENT_ID:-}
+        VITE_AZURE_TENANT_ID: ${VITE_AZURE_TENANT_ID:-}
+        VITE_API_SCOPE: ${VITE_API_SCOPE:-}
+    ports:
+      - "8080:80"
+    depends_on: [api]
+    restart: unless-stopped
