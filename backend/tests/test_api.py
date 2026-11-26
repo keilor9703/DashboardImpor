@@ -154,3 +154,12 @@ def test_login_password():
         assert client.get("/api/me", headers={"Authorization": "Bearer basura"}).status_code == 401
     finally:
         app.dependency_overrides.clear()
+
+
+def test_auth_users_tolerante_y_diagnostico():
+    from app.passwords import diagnose_users, hash_password, parse_users, verify_password
+    h = hash_password("x-123")
+    users = parse_users(f'  "Gerencia:{h} "\n')
+    assert verify_password("x-123", users["gerencia"])
+    assert "no tiene(n) un hash válido" in diagnose_users("gerencia:kjdvbfkdjvkfjd")
+    assert "1 usuario(s): gerencia" in diagnose_users(f"gerencia:{h}")

@@ -29,12 +29,27 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def parse_users(raw: str) -> dict[str, str]:
+    """«usuario:hash;usuario2:hash». Tolera espacios, saltos de línea y comillas al copiar/pegar."""
     users = {}
-    for item in raw.split(";"):
+    limpio = raw.strip().strip("\"'")
+    for item in limpio.replace("\n", ";").split(";"):
         if ":" in item:
             u, h = item.split(":", 1)
-            users[u.strip().lower()] = h.strip()
+            users[u.strip().strip("\"'").lower()] = h.strip().strip("\"'")
     return users
+
+
+def diagnose_users(raw: str) -> str:
+    """Resumen seguro (sin contraseñas) de AUTH_USERS para los logs."""
+    users = parse_users(raw)
+    if not users:
+        return "AUTH_USERS está vacío o sin el formato usuario:hash"
+    malos = [u for u, h in users.items() if not (h.startswith("pbkdf2$") and h.count("$") == 3)]
+    texto = f"AUTH_USERS: {len(users)} usuario(s): {', '.join(users)}"
+    if malos:
+        texto += (f". ATENCIÓN: {', '.join(malos)} no tiene(n) un hash válido (debe empezar por «pbkdf2$»). "
+                  "Genere el hash con: python -m app.passwords")
+    return texto
 
 
 if __name__ == "__main__":

@@ -14,6 +14,10 @@ from .services.repository import DataUnavailable
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 settings = get_settings()
 
+if settings.auth_mode == "password":
+    from .passwords import diagnose_users
+    logging.getLogger("app.auth").warning(diagnose_users(settings.auth_users))
+
 if settings.environment == "production" and settings.auth_mode == "demo":
     # Nunca publicar datos reales sin login
     raise RuntimeError("AUTH_MODE=demo no está permitido con ENVIRONMENT=production. Use password o entra.")
