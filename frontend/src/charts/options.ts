@@ -5,7 +5,7 @@
  * y tooltip en todos los gráficos.
  */
 import type { EChartsCoreOption } from "echarts/core";
-import type { DashboardData } from "../api/types";
+import type { DashboardData, RutaEtapas } from "../api/types";
 import type { Tokens } from "../lib/theme";
 import { days, int, mesCorto, pct, usd } from "../lib/format";
 
@@ -27,8 +27,12 @@ const row = (color: string, label: string, value: string) =>
 
 const usdAxis = (v: number) => (v === 0 ? "0" : usd(v).replace("US$ ", ""));
 
-/** Comercio exterior mensual: importación vs. exportación (USD). */
-export function monthlyTrade(d: DashboardData["mensual"], t: Tokens): EChartsCoreOption {
+export const ROUTE_COLORS = (t: Tokens) => [t.s1, t.s2, t.s3, t.muted];
+
+/** Valor movilizado por mes, apilado por ruta (rutas principales + «Otras»). */
+export function monthlyByRoute(d: DashboardData["mensual"], rutas: string[], t: Tokens): EChartsCoreOption {
+  const series = [...rutas, "Otras"];
+  const colors = ROUTE_COLORS(t);
   return {
     animationDuration: 500,
     grid: { left: 8, right: 8, top: 16, bottom: 4, containLabel: true },
@@ -38,51 +42,36 @@ export function monthlyTrade(d: DashboardData["mensual"], t: Tokens): EChartsCor
       axisPointer: { type: "shadow", shadowStyle: { color: t.grid, opacity: 0.6 } },
       formatter: (ps: { dataIndex: number }[]) => {
         const p = d[ps[0].dataIndex];
-        const total = p.importaciones_usd + p.exportaciones_usd;
         return `<div style="font-weight:600;margin-bottom:4px">${mesCorto(p.mes)}</div>` +
-          row(t.s1, "Importación", usd(p.importaciones_usd)) +
-          row(t.s2, "Exportación", usd(p.exportaciones_usd)) +
-          `<div style="border-top:1px solid ${t.grid};margin-top:4px;padding-top:4px;color:${t.text2}">Total ${usd(total)} · ${int(p.operaciones)} DO</div>`;
+          series.map((r, i) => row(colors[i], r, usd(p.rutas[r] ?? 0))).join("") +
+          `<div style="border-top:1px solid ${t.grid};margin-top:4px;padding-top:4px;color:${t.text2}">Total ${usd(p.valor_usd)} · ${int(p.embarques)} embarques</div>`;
       },
     },
     xAxis: {
-      type: "category",
-      data: d.map((p) => mesCorto(p.mes)),
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: t.border } },
-      axisLabel: axisLabel(t),
+      type: "category", data: d.map((p) => mesCorto(p.mes)),
+      axisTick: { show: false }, axisLine: { lineStyle: { color: t.border } }, axisLabel: axisLabel(t),
     },
-    yAxis: {
-      type: "value",
-      splitLine: { lineStyle: { color: t.grid } },
-      axisLabel: { ...axisLabel(t), formatter: usdAxis },
-    },
-    series: [
-      { name: "Importación", key: "importaciones_usd", color: t.s1 },
-      { name: "Exportación", key: "exportaciones_usd", color: t.s2 },
-    ].map((s) => ({
-      name: s.name,
-      type: "bar",
-      data: d.map((p) => p[s.key as "importaciones_usd"]),
-      barMaxWidth: 16,
-      barGap: "12%",
-      itemStyle: { color: s.color, borderRadius: [4, 4, 0, 0] },
+    yAxis: { type: "value", splitLine: { lineStyle: { color: t.grid } }, axisLabel: { ...axisLabel(t), formatter: usdAxis } },
+    series: series.map((r, i) => ({
+      name: r, type: "bar", stack: "valor", barMaxWidth: 44,
+      data: d.map((p) => p.rutas[r] ?? 0),
+      itemStyle: { color: colors[i], borderColor: t.surface, borderWidth: 1, borderRadius: i === series.length - 1 ? [4, 4, 0, 0] : 0 },
       emphasis: { focus: "series" },
     })),
   };
 }
 
-/** Flujo operativo: operaciones abiertas por etapa. */
-export function pipeline(d: DashboardData["estados"], t: Tokens): EChartsCoreOption {
+/** Torre de control: embarques abiertos por estado. */
+export function pipeline(d: DashboardData["pipeline"], t: Tokens): EChartsCoreOption {
   return {
-    grid: { left: 4, right: 44, top: 4, bottom: 4, containLabel: true },
+    grid: { left: 4, right: 40, top: 4, bottom: 4, containLabel: true },
     tooltip: {
       ...tooltipBase(t),
       trigger: "item",
       formatter: (p: { dataIndex: number }) => {
         const e = d[p.dataIndex];
         return `<div style="font-weight:600;margin-bottom:4px">${e.estado}</div>` +
-          row(t.s1, "Operaciones", int(e.operaciones)) + row(t.s1, "Valor", usd(e.valor_usd));
+          row(t.s1, "Embarques", int(e.embarques)) + row(t.s1, "Contenedores", int(e.contenedores)) + row(t.s1, "Valor", usd(e.valor_usd));
       },
     },
     xAxis: { type: "value", show: false },
@@ -91,127 +80,112 @@ export function pipeline(d: DashboardData["estados"], t: Tokens): EChartsCoreOpt
       axisTick: { show: false }, axisLine: { show: false }, axisLabel: { ...axisLabel(t), color: t.text },
     },
     series: [{
-      type: "bar",
-      data: d.map((e) => e.operaciones),
-      barWidth: 14,
+      type: "bar", data: d.map((e) => e.embarques), barWidth: 14,
       itemStyle: { color: t.s1, borderRadius: [0, 4, 4, 0] },
-      showBackground: true,
-      backgroundStyle: { color: t.grid, borderRadius: 4 },
+      showBackground: true, backgroundStyle: { color: t.grid, borderRadius: 4 },
       label: { show: true, position: "right", color: t.text, fontWeight: 600, fontFamily: t.font, formatter: (p: { value: number }) => int(p.value) },
     }],
   };
 }
 
-/** Clientes con mayor valor operado. */
-export function topClients(d: DashboardData["top_clientes"], t: Tokens): EChartsCoreOption {
-  const short = (s: string) => s.replace(/ (S\.A\.S\.|S\.A\.|Ltda\.|C\.I\.)$/, "");
+/** Lead time por etapa: barra = promedio real, marca vertical = meta (bullet chart). */
+export function stagesBullet(d: RutaEtapas, t: Tokens): EChartsCoreOption {
+  const et = d.etapas;
   return {
-    grid: { left: 4, right: 92, top: 4, bottom: 4, containLabel: true },
+    grid: { left: 4, right: 70, top: 8, bottom: 4, containLabel: true },
     tooltip: {
       ...tooltipBase(t),
       trigger: "item",
       formatter: (p: { dataIndex: number }) => {
-        const c = d[p.dataIndex];
-        return `<div style="font-weight:600;margin-bottom:4px">${c.cliente}</div>` +
-          row(t.s1, "Valor", usd(c.valor_usd)) + row(t.s1, "Operaciones", int(c.operaciones)) + row(t.s1, "Participación", pct(c.participacion));
+        const e = et[p.dataIndex];
+        const over = e.real != null && e.meta != null && e.real > e.meta;
+        return `<div style="font-weight:600;margin-bottom:4px">${e.label}</div>` +
+          row(over ? t.serious : t.muted, "Real promedio", days(e.real)) + row(t.text2, "Meta", days(e.meta)) +
+          `<div style="color:${t.text2};margin-top:4px">${over ? "▲ Sobre la meta" : "✓ Dentro de la meta"} · ${int(e.n)} mediciones</div>`;
+      },
+    },
+    xAxis: { type: "value", show: false, max: (v: { max: number }) => v.max * 1.05 },
+    yAxis: {
+      type: "category", inverse: true, data: et.map((e) => e.label),
+      axisTick: { show: false }, axisLine: { show: false }, axisLabel: { ...axisLabel(t), color: t.text },
+    },
+    series: [
+      {
+        type: "bar", barWidth: 12, z: 2,
+        data: et.map((e) => ({ value: e.real ?? 0, itemStyle: { color: e.real != null && e.meta != null && e.real > e.meta ? t.serious : t.muted } })),
+        itemStyle: { borderRadius: [0, 4, 4, 0] },
+        label: {
+          show: true, position: "right", fontFamily: t.font, fontSize: 12, distance: 12,
+          formatter: (p: { dataIndex: number }) => {
+            const e = et[p.dataIndex];
+            return e.real == null ? "{m|sin dato}" : `{v|${e.real.toLocaleString("es-CO", { maximumFractionDigits: 1 })} d}  {m|/ ${e.meta} d}`;
+          },
+          rich: { v: { color: t.text, fontWeight: 600 }, m: { color: t.text3 } },
+        },
+      },
+      {
+        type: "scatter", z: 3, silent: true, symbol: "rect", symbolSize: [3, 22],
+        data: et.map((e) => e.meta), itemStyle: { color: t.text },
+      },
+    ],
+  };
+}
+
+/** Tránsito internacional promedio por naviera. */
+export function carriers(d: DashboardData["navieras"], t: Tokens): EChartsCoreOption {
+  const rows = d.filter((n) => n.transito_promedio != null);
+  return {
+    grid: { left: 4, right: 56, top: 4, bottom: 4, containLabel: true },
+    tooltip: {
+      ...tooltipBase(t), trigger: "item",
+      formatter: (p: { dataIndex: number }) => {
+        const n = rows[p.dataIndex];
+        return `<div style="font-weight:600;margin-bottom:4px">${n.naviera}</div>` +
+          row(t.s1, "Tránsito promedio", days(n.transito_promedio)) + row(t.s1, "Embarques", int(n.embarques)) + row(t.s1, "Valor", usd(n.valor_usd));
       },
     },
     xAxis: { type: "value", show: false },
     yAxis: {
-      type: "category", inverse: true, data: d.map((c) => short(c.cliente)),
-      axisTick: { show: false }, axisLine: { show: false },
-      axisLabel: { ...axisLabel(t), color: t.text, width: 170, overflow: "truncate" },
+      type: "category", inverse: true, data: rows.map((n) => `${n.naviera} (${n.embarques})`),
+      axisTick: { show: false }, axisLine: { show: false }, axisLabel: { ...axisLabel(t), color: t.text },
     },
     series: [{
-      type: "bar",
-      data: d.map((c) => c.valor_usd),
-      barWidth: 12,
+      type: "bar", barWidth: 12, data: rows.map((n) => n.transito_promedio),
       itemStyle: { color: t.s1, borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: "right", color: t.text, fontWeight: 600, fontFamily: t.font,
+        formatter: (p: { value: number }) => `${p.value.toLocaleString("es-CO", { maximumFractionDigits: 1 })} d` },
+    }],
+  };
+}
+
+/** Valor por franquicia; «Sin franquicia» en gris para evidenciar el vacío de datos. */
+export function franchises(d: DashboardData["franquicias"], t: Tokens): EChartsCoreOption {
+  return {
+    grid: { left: 4, right: 92, top: 4, bottom: 4, containLabel: true },
+    tooltip: {
+      ...tooltipBase(t), trigger: "item",
+      formatter: (p: { dataIndex: number }) => {
+        const f = d[p.dataIndex];
+        return `<div style="font-weight:600;margin-bottom:4px">${f.franquicia}</div>` +
+          row(t.s1, "Valor", usd(f.valor_usd)) + row(t.s1, "Participación", pct(f.participacion));
+      },
+    },
+    xAxis: { type: "value", show: false },
+    yAxis: {
+      type: "category", inverse: true, data: d.map((f) => f.franquicia),
+      axisTick: { show: false }, axisLine: { show: false },
+      axisLabel: { ...axisLabel(t), color: t.text, width: 150, overflow: "truncate" },
+    },
+    series: [{
+      type: "bar", barWidth: 12,
+      data: d.map((f) => ({ value: f.valor_usd, itemStyle: { color: f.franquicia === "Sin franquicia" ? t.muted : t.s1 } })),
+      itemStyle: { borderRadius: [0, 4, 4, 0] },
       label: {
         show: true, position: "right", fontFamily: t.font, fontSize: 12,
         formatter: (p: { dataIndex: number }) => `{v|${usd(d[p.dataIndex].valor_usd)}}  {p|${pct(d[p.dataIndex].participacion, 0)}}`,
         rich: { v: { color: t.text, fontWeight: 600 }, p: { color: t.text3 } },
       },
     }],
-  };
-}
-
-/** Tiempo promedio de trámite por aduana contra la meta (SLA). */
-export function customsTimes(d: DashboardData["aduanas"], sla: number, t: Tokens): EChartsCoreOption {
-  return {
-    grid: { left: 4, right: 64, top: 22, bottom: 4, containLabel: true },
-    tooltip: {
-      ...tooltipBase(t),
-      trigger: "item",
-      formatter: (p: { dataIndex: number }) => {
-        const a = d[p.dataIndex];
-        const over = a.dias_promedio > sla;
-        return `<div style="font-weight:600;margin-bottom:4px">${a.aduana}</div>` +
-          row(over ? t.serious : t.muted, "Promedio", days(a.dias_promedio)) +
-          row(over ? t.serious : t.muted, "En meta", pct(a.cumplimiento_sla)) +
-          row(over ? t.serious : t.muted, "Operaciones", int(a.operaciones)) +
-          `<div style="color:${t.text2};margin-top:4px">${over ? "▲ Sobre la meta" : "✓ Dentro de la meta"} (${sla} días)</div>`;
-      },
-    },
-    xAxis: { type: "value", show: false, max: (v: { max: number }) => Math.max(v.max, sla) * 1.08 },
-    yAxis: {
-      type: "category", inverse: true, data: d.map((a) => a.aduana),
-      axisTick: { show: false }, axisLine: { show: false }, axisLabel: { ...axisLabel(t), color: t.text },
-    },
-    series: [{
-      type: "bar",
-      data: d.map((a) => ({ value: a.dias_promedio, itemStyle: { color: a.dias_promedio > sla ? t.serious : t.muted } })),
-      barWidth: 12,
-      itemStyle: { borderRadius: [0, 4, 4, 0] },
-      label: {
-        show: true, position: "right", fontFamily: t.font, fontSize: 12, color: t.text,
-        formatter: (p: { value: number }) => `${p.value.toLocaleString("es-CO", { maximumFractionDigits: 1 })} d`,
-      },
-      markLine: {
-        symbol: "none", silent: true,
-        lineStyle: { color: t.text2, type: [4, 4], width: 1.5 },
-        label: { formatter: `Meta ${sla} d`, color: t.text2, fontFamily: t.font, fontSize: 11, position: "start", distance: [0, 6] },
-        data: [{ xAxis: sla }],
-      },
-    }],
-  };
-}
-
-/** Principales países de origen / destino (barras apiladas con separación de 2px). */
-export function countries(d: DashboardData["paises"], t: Tokens): EChartsCoreOption {
-  const s = (name: string, key: "importaciones_usd" | "exportaciones_usd", color: string, last: boolean) => ({
-    name, type: "bar", stack: "total", barWidth: 12,
-    data: d.map((p) => p[key]),
-    itemStyle: { color, borderColor: t.surface, borderWidth: 1, borderRadius: last ? [0, 4, 4, 0] : 0 },
-    emphasis: { focus: "series" },
-  });
-  return {
-    grid: { left: 4, right: 70, top: 4, bottom: 4, containLabel: true },
-    tooltip: {
-      ...tooltipBase(t),
-      trigger: "axis",
-      axisPointer: { type: "shadow", shadowStyle: { color: t.grid, opacity: 0.6 } },
-      formatter: (ps: { dataIndex: number }[]) => {
-        const p = d[ps[0].dataIndex];
-        return `<div style="font-weight:600;margin-bottom:4px">${p.pais}</div>` +
-          row(t.s1, "Importación", usd(p.importaciones_usd)) + row(t.s2, "Exportación", usd(p.exportaciones_usd));
-      },
-    },
-    xAxis: { type: "value", show: false },
-    yAxis: {
-      type: "category", inverse: true, data: d.map((p) => p.pais),
-      axisTick: { show: false }, axisLine: { show: false }, axisLabel: { ...axisLabel(t), color: t.text },
-    },
-    series: [
-      s("Importación", "importaciones_usd", t.s1, false),
-      {
-        ...s("Exportación", "exportaciones_usd", t.s2, true),
-        label: {
-          show: true, position: "right", color: t.text, fontFamily: t.font, fontSize: 12, fontWeight: 600,
-          formatter: (p: { dataIndex: number }) => usd(d[p.dataIndex].importaciones_usd + d[p.dataIndex].exportaciones_usd),
-        },
-      },
-    ],
   };
 }
 

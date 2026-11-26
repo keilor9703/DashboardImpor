@@ -1,21 +1,47 @@
-"""Cálculo de KPIs y agregaciones para el dashboard ejecutivo."""
+"""Indicadores de la torre de control logística.
+
+Niveles de agregación:
+  - línea:   una fila del Excel (SKU / línea de PO)
+  - unidad:  embarque + PO → unidad con la que el cliente mide el PDT (hoja «In Transit PDT»)
+  - embarque: número de exportación / documento de transporte
+"""
 from dataclasses import dataclass
 from datetime import date, timedelta
 from math import isfinite
 
 import pandas as pd
 
-from ..data.schema import ESTADO_FINAL, ESTADOS
+from ..data.schema import ESTADO_ETAPA, ESTADO_FINAL, ESTADO_ORDEN, ESTADOS
+from ..data.targets import ETAPAS
+
+DIMENSIONES = [
+    ("modo", "modo_txt", "Transporte"),
+    ("origen", "origen_pais", "Origen"),
+    ("destino", "destino_pais", "Destino"),
+    ("franquicia", "franquicia", "Franquicia"),
+    ("forwarder", "forwarder", "Forwarder"),
+]
+HITOS = ["po_fecha", "pickup", "etd", "atd", "eta", "eta_actualizada", "ata", "despacho", "entrega_wh", "sap"]
+# Si falta el hito que inicia la etapa actual, se usa el anterior conocido
+INICIO_ETAPA = {
+    "orden": ["po_fecha"],
+    "inland": ["pickup", "po_fecha"],
+    "transito": ["atd", "etd", "pickup"],
+    "nacionalizacion": ["ata", "eta_actualizada", "eta", "atd"],
+    "local": ["despacho", "ata"],
+    "sap": ["entrega_wh", "despacho"],
+}
 
 
 @dataclass
 class Filtros:
     desde: date
     hasta: date
-    tipo: str | None = None
-    cliente: str | None = None
-    aduana: str | None = None
-    modalidad: str | None = None
+    modo: str | None = None
+    origen: str | None = None
+    destino: str | None = None
+    franquicia: str | None = None
+    forwarder: str | None = None
 
 
 def _num(x, nd: int = 2):
@@ -26,189 +52,320 @@ def _num(x, nd: int = 2):
     return round(x, nd) if isfinite(x) else None
 
 
+def _iso(x):
+    return None if x is None or pd.isna(x) else pd.Timestamp(x).isoformat()
+
+
 def _dims(df: pd.DataFrame, f: Filtros) -> pd.DataFrame:
     m = pd.Series(True, index=df.index)
-    for col in ("tipo", "cliente", "aduana", "modalidad"):
-        val = getattr(f, col)
+    for key, col, _ in DIMENSIONES:
+        val = getattr(f, key)
         if val:
             m &= df[col] == val
     return df[m]
 
 
 def _periodo(df: pd.DataFrame, desde: date, hasta: date) -> pd.DataFrame:
-    fa = df["fecha_apertura"]
     fin = pd.Timestamp(hasta) + pd.Timedelta(days=1)
-    return df[(fa >= pd.Timestamp(desde)) & (fa < fin)]
+    return df[(df["fecha_ref"] >= pd.Timestamp(desde)) & (df["fecha_ref"] < fin)]
 
 
-def _metricas(d: pd.DataFrame, sla: float) -> dict:
-    cerradas = d.dropna(subset=["dias_tramite"])
+def unidades(d: pd.DataFrame) -> pd.DataFrame:
+    """Embarque + PO: duraciones, PDT y metas (iguales en todas las líneas de la unidad)."""
+    if d.empty:
+        return d
+    cols = ["embarque", "ruta", "modo_cod", "modo_txt", "estado", "naviera", "forwarder", "pdt", "meta_pdt", "meta_oficial",
+            *[f"d_{k}" for k, *_ in ETAPAS], *[f"m_{k}" for k, *_ in ETAPAS]]
+    u = d.groupby("unidad", sort=False)[cols].first()
+    u["valor_usd"] = d.groupby("unidad", sort=False)["valor_usd"].sum()
+    u["a_tiempo"] = (u["pdt"] <= u["meta_pdt"]).where(u["pdt"].notna() & u["meta_pdt"].notna())
+    return u
+
+
+def embarques(d: pd.DataFrame) -> pd.DataFrame:
+    if d.empty:
+        return pd.DataFrame()
+    g = d.groupby("embarque", sort=False)
+    e = g[["estado", "ruta", "origen_pais", "destino_pais", "modo_cod", "modo_txt", "forwarder", "naviera", "agente_aduana",
+           "canal", "tipo_carga", "shipment_ref", "booking", "meta_pdt", "meta_oficial",
+           *[f"m_{k}" for k, *_ in ETAPAS]]].first()
+    for h in HITOS:
+        e[h] = g[h].min() if h in ("po_fecha", "pickup", "etd", "atd", "eta") else g[h].max()
+    e["fecha_ref"] = g["fecha_ref"].min()
+    e["valor_usd"] = g["valor_usd"].sum()
+    e["lineas"] = g.size()
+    e["contenedores"] = g["contenedor"].nunique()
+    e["pos"] = g["po"].nunique()
+    e["pdt"] = g["pdt"].mean()
+    e["orden_estado"] = e["estado"].map(ESTADO_ORDEN).fillna(99)
+    return e
+
+
+def _metricas(d: pd.DataFrame) -> dict:
+    u = unidades(d)
+    cerradas = u[u["pdt"].notna()] if len(u) else u
+    con_meta = cerradas[cerradas["a_tiempo"].notna()] if len(u) else u
     return {
-        "operaciones": len(d),
+        "embarques": d["embarque"].nunique(),
         "valor_usd": d["valor_usd"].sum(),
-        "importaciones_usd": d.loc[d["tipo"] == "Importación", "valor_usd"].sum(),
-        "exportaciones_usd": d.loc[d["tipo"] == "Exportación", "valor_usd"].sum(),
-        "tributos_cop": d["tributos_cop"].sum(),
-        "dias_tramite": cerradas["dias_tramite"].mean() if len(cerradas) else None,
-        "cumplimiento_sla": (cerradas["dias_tramite"] <= sla).mean() * 100 if len(cerradas) else None,
-        "en_curso": int(d["en_curso"].sum()),
+        "contenedores": d["contenedor"].nunique(),
+        "pdt_promedio": cerradas["pdt"].mean() if len(cerradas) else None,
+        "cumplimiento_pdt": con_meta["a_tiempo"].astype(float).mean() * 100 if len(con_meta) else None,
+        "nacionalizacion": u["d_nacionalizacion"].mean() if len(u) and u["d_nacionalizacion"].notna().any() else None,
     }
 
 
 def _delta(cur, prev):
-    if cur is None or prev in (None, 0):
+    if cur is None or prev in (None, 0) or pd.isna(prev):
         return None
     return _num((cur - prev) / abs(prev) * 100, 1)
 
 
 KPI_DEFS = [
-    # id, etiqueta, formato, qué es "mejor"
-    ("operaciones", "Operaciones (DO)", "int", "up"),
-    ("importaciones_usd", "Valor importado (CIF)", "usd", "up"),
-    ("exportaciones_usd", "Valor exportado (FOB)", "usd", "up"),
-    ("tributos_cop", "Tributos aduaneros", "cop", "neutral"),
-    ("dias_tramite", "Tiempo prom. de trámite", "days", "down"),
-    ("cumplimiento_sla", "Cumplimiento de meta", "pct", "up"),
+    ("embarques", "Embarques", "int", "up"),
+    ("valor_usd", "Valor movilizado", "usd", "up"),
+    ("contenedores", "Contenedores", "int", "up"),
+    ("pdt_promedio", "Lead time total (PDT)", "days", "down"),
+    ("cumplimiento_pdt", "Cumplimiento de PDT", "pct", "up"),
+    ("nacionalizacion", "Tiempo de nacionalización", "days", "down"),
 ]
 
 
-def dashboard(df: pd.DataFrame, f: Filtros, sla: float, hoy: date | None = None) -> dict:
-    hoy = hoy or date.today()
+def _alertas(abiertos: pd.DataFrame, hoy: pd.Timestamp) -> list[dict]:
+    out = []
+    for emb, r in abiertos.iterrows():
+        etapa = ESTADO_ETAPA.get(r["estado"])
+        if not etapa:
+            continue
+        inicio = next((r[c] for c in INICIO_ETAPA[etapa] if pd.notna(r[c])), None)
+        meta = r[f"m_{etapa}"]
+        if inicio is None or pd.isna(meta):
+            continue
+        dias = (hoy - inicio).total_seconds() / 86400
+        exceso = dias - max(meta, 0.5)
+        if exceso <= 0.5:
+            continue
+        out.append({
+            "embarque": emb, "estado": r["estado"], "ruta": r["ruta"], "modo": r["modo_txt"],
+            "etapa": next(e[1] for e in ETAPAS if e[0] == etapa),
+            "dias": _num(dias, 1), "meta": _num(meta, 1), "exceso": _num(exceso, 1),
+            "valor_usd": _num(r["valor_usd"]), "contenedores": int(r["contenedores"]),
+            "forwarder": r["forwarder"], "meta_oficial": bool(r["meta_oficial"]),
+            "severidad": "critical" if dias > 2 * max(meta, 1) else "serious",
+        })
+    return sorted(out, key=lambda a: -a["exceso"])
+
+
+def dashboard(df: pd.DataFrame, f: Filtros, hoy: date | None = None) -> dict:
+    hoy_ts = pd.Timestamp(hoy or date.today())
     base = _dims(df, f)
-    actual = _periodo(base, f.desde, f.hasta)
+    act = _periodo(base, f.desde, f.hasta)
     dias = (f.hasta - f.desde).days + 1
     prev_hasta = f.desde - timedelta(days=1)
     prev_desde = prev_hasta - timedelta(days=dias - 1)
-    anterior = _periodo(base, prev_desde, prev_hasta)
+    ant = _periodo(base, prev_desde, prev_hasta)
+    m_act, m_ant = _metricas(act), _metricas(ant)
 
-    m_act, m_ant = _metricas(actual, sla), _metricas(anterior, sla)
-
-    # Serie mensual (también alimenta los sparklines de los KPIs)
-    mensual = []
-    if len(actual):
-        a = actual.assign(mes=actual["fecha_apertura"].dt.to_period("M"))
-        for mes in pd.period_range(pd.Timestamp(f.desde).to_period("M"), pd.Timestamp(f.hasta).to_period("M"), freq="M"):
+    # --- Serie mensual (desde el primer mes con datos) ---
+    mensual, rutas_top = [], []
+    if len(act):
+        # Rutas principales calculadas sobre TODO el archivo: el color de cada ruta no cambia al filtrar
+        rutas_top = df.groupby("ruta")["valor_usd"].sum().sort_values(ascending=False).head(3).index.tolist()
+        a = act.assign(mes=act["fecha_ref"].dt.to_period("M"))
+        inicio = max(pd.Timestamp(f.desde).to_period("M"), a["mes"].min())
+        for mes in pd.period_range(inicio, pd.Timestamp(f.hasta).to_period("M"), freq="M"):
             g = a[a["mes"] == mes]
-            mm = _metricas(g, sla)
+            mm = _metricas(g)
+            por_ruta = g.groupby("ruta")["valor_usd"].sum()
             mensual.append({
                 "mes": str(mes),
-                "operaciones": mm["operaciones"],
-                "importaciones_usd": _num(mm["importaciones_usd"]),
-                "exportaciones_usd": _num(mm["exportaciones_usd"]),
-                "tributos_cop": _num(mm["tributos_cop"], 0),
-                "dias_tramite": _num(mm["dias_tramite"], 2),
-                "cumplimiento_sla": _num(mm["cumplimiento_sla"], 1),
+                **{k: _num(v, 2) for k, v in mm.items()},
+                "rutas": {r: _num(por_ruta.get(r, 0)) for r in rutas_top} | {"Otras": _num(por_ruta.drop(rutas_top, errors="ignore").sum())},
             })
 
-    kpis = [
-        {
-            "id": k, "label": label, "format": fmt, "better": better,
-            "value": _num(m_act[k]), "previous": _num(m_ant[k]),
-            "delta_pct": _delta(m_act[k], m_ant[k]),
-            "sparkline": [p[k] for p in mensual],
-        }
-        for k, label, fmt, better in KPI_DEFS
-    ]
+    kpis = [{
+        "id": k, "label": label, "format": fmt, "better": better,
+        "value": _num(m_act[k]), "previous": _num(m_ant[k]), "delta_pct": _delta(m_act[k], m_ant[k]),
+        "sparkline": [p[k] for p in mensual],
+    } for k, label, fmt, better in KPI_DEFS]
 
-    # Estado actual del flujo operativo (todas las operaciones abiertas, sin filtro de fecha)
-    abiertas = base[base["en_curso"]]
-    estados = [
-        {"estado": e, "operaciones": int((abiertas["estado"] == e).sum()),
-         "valor_usd": _num(abiertas.loc[abiertas["estado"] == e, "valor_usd"].sum())}
-        for e in ESTADOS if e != ESTADO_FINAL
-    ]
+    # --- Torre de control: embarques abiertos (sin filtro de fecha) ---
+    e_base = embarques(base)
+    abiertos = e_base[e_base["estado"] != ESTADO_FINAL] if len(e_base) else e_base
+    pipeline = []
+    for _, label, _ in ESTADOS[:-1]:
+        g = abiertos[abiertos["estado"] == label] if len(abiertos) else abiertos
+        pipeline.append({"estado": label, "embarques": int(len(g)),
+                         "valor_usd": _num(g["valor_usd"].sum()) if len(g) else 0,
+                         "contenedores": int(g["contenedores"].sum()) if len(g) else 0})
 
-    total_valor = actual["valor_usd"].sum() or 1
-    top = actual.groupby("cliente").agg(valor_usd=("valor_usd", "sum"), operaciones=("do", "count")).sort_values("valor_usd", ascending=False)
-    top_clientes = [
-        {"cliente": c, "valor_usd": _num(r.valor_usd), "operaciones": int(r.operaciones), "participacion": _num(r.valor_usd / total_valor * 100, 1)}
-        for c, r in top.head(10).iterrows()
-    ]
+    alertas = _alertas(abiertos, hoy_ts) if len(abiertos) else []
 
-    cerradas = actual.dropna(subset=["dias_tramite"])
-    adu = cerradas.groupby("aduana").agg(
-        operaciones=("do", "count"), dias_promedio=("dias_tramite", "mean"),
-        cumplimiento=("dias_tramite", lambda s: (s <= sla).mean() * 100),
-    ).sort_values("operaciones", ascending=False)
-    aduanas = [
-        {"aduana": a, "operaciones": int(r.operaciones), "dias_promedio": _num(r.dias_promedio, 1), "cumplimiento_sla": _num(r.cumplimiento, 1)}
-        for a, r in adu.iterrows()
-    ]
+    proximos = []
+    if len(abiertos):
+        transito = abiertos[abiertos["estado"].isin(["Pendiente de zarpe", "Tránsito internacional"])].copy()
+        transito["eta_vigente"] = transito["eta_actualizada"].fillna(transito["eta"])
+        # Solo arribos futuros (o de ayer) y coherentes: ETA posterior al zarpe
+        coherente = transito["atd"].isna() | (transito["eta_vigente"] >= transito["atd"])
+        transito = transito[(transito["eta_vigente"] >= hoy_ts - pd.Timedelta(days=1)) & coherente].sort_values("eta_vigente")
+        proximos = [{
+            "embarque": emb, "estado": r["estado"], "ruta": r["ruta"], "modo": r["modo_txt"], "eta": _iso(r["eta_vigente"]),
+            "dias": _num((r["eta_vigente"] - hoy_ts).total_seconds() / 86400, 0), "naviera": r["naviera"],
+            "contenedores": int(r["contenedores"]), "valor_usd": _num(r["valor_usd"]),
+        } for emb, r in transito.head(8).iterrows()]
 
-    pai = actual.pivot_table(index="pais", columns="tipo", values="valor_usd", aggfunc="sum", fill_value=0)
-    for col in ("Importación", "Exportación"):
-        if col not in pai.columns:
-            pai[col] = 0.0
-    pai = pai.assign(total=pai["Importación"] + pai["Exportación"]).sort_values("total", ascending=False).head(8)
-    paises = [{"pais": p, "importaciones_usd": _num(r["Importación"]), "exportaciones_usd": _num(r["Exportación"])} for p, r in pai.iterrows()]
+    # --- Lead time por etapa vs meta, por ruta ---
+    u_act = unidades(act)
+    etapas, rutas = [], []
+    if len(u_act):
+        e_act = embarques(act)
+        for (ruta, modo), g in u_act.groupby(["ruta", "modo_txt"], sort=False):
+            cerr = g[g["pdt"].notna()]
+            con_meta = cerr[cerr["a_tiempo"].notna()]
+            ge = e_act[(e_act["ruta"] == ruta) & (e_act["modo_txt"] == modo)]
+            rutas.append({
+                "ruta": ruta, "modo": modo, "embarques": int(len(ge)), "en_curso": int((ge["estado"] != ESTADO_FINAL).sum()),
+                "valor_usd": _num(g["valor_usd"].sum()), "contenedores": int(ge["contenedores"].sum()),
+                "pdt_promedio": _num(cerr["pdt"].mean(), 1) if len(cerr) else None,
+                "meta_pdt": _num(g["meta_pdt"].iloc[0], 1), "meta_oficial": bool(g["meta_oficial"].iloc[0]),
+                "cumplimiento": _num(con_meta["a_tiempo"].astype(float).mean() * 100, 1) if len(con_meta) else None,
+                "transito_promedio": _num(g["d_transito"].mean(), 1),
+            })
+            if g["meta_oficial"].iloc[0] and g["d_orden"].notna().any():
+                etapas.append({
+                    "id": f"{ruta} · {modo}", "ruta": ruta, "modo": modo, "unidades": int(len(g)),
+                    "pdt_real": _num(cerr["pdt"].mean(), 1) if len(cerr) else None,
+                    "pdt_meta": _num(g["meta_pdt"].iloc[0], 1),
+                    "etapas": [{"key": k, "label": lbl, "real": _num(g[f"d_{k}"].mean(), 1),
+                                "meta": _num(g[f"m_{k}"].iloc[0], 1), "n": int(g[f"d_{k}"].notna().sum())}
+                               for k, lbl, *_ in ETAPAS],
+                })
+        rutas.sort(key=lambda r: -(r["valor_usd"] or 0))
+        etapas.sort(key=lambda r: -r["unidades"])
 
-    mod = actual.groupby("modalidad").agg(operaciones=("do", "count"), valor_usd=("valor_usd", "sum")).sort_values("operaciones", ascending=False)
-    modalidades = [{"modalidad": k, "operaciones": int(r.operaciones), "valor_usd": _num(r.valor_usd)} for k, r in mod.iterrows()]
+    navieras = []
+    sea = u_act[(u_act["modo_cod"] == "SEA") & (u_act["naviera"] != "Sin dato")] if len(u_act) else u_act
+    if len(sea):
+        for nav, g in sea.groupby("naviera"):
+            navieras.append({"naviera": nav, "embarques": int(g["embarque"].nunique()),
+                             "transito_promedio": _num(g["d_transito"].mean(), 1),
+                             "valor_usd": _num(g["valor_usd"].sum())})
+        navieras.sort(key=lambda n: -n["embarques"])
 
-    # Alertas: operaciones abiertas que ya llegaron y superan la meta de días
-    llegadas = abiertas[abiertas["fecha_llegada"].notna() & (abiertas["fecha_llegada"] <= pd.Timestamp(hoy))]
-    llegadas = llegadas.assign(dias=(pd.Timestamp(hoy) - llegadas["fecha_llegada"]).dt.days)
-    retrasadas = llegadas[(llegadas["dias"] > sla) & llegadas["estado"].isin(["En aduana", "Inspección"])].sort_values("dias", ascending=False)
-    alertas = [
-        {"do": r.do, "cliente": r.cliente, "tipo": r.tipo, "aduana": r.aduana, "estado": r.estado,
-         "dias": int(r.dias), "valor_usd": _num(r.valor_usd), "ejecutivo": r.ejecutivo,
-         "severidad": "critical" if r.dias > 2 * sla else "serious"}
-        for r in retrasadas.head(12).itertuples()
-    ]
+    franquicias = []
+    if len(act):
+        fr = act.groupby("franquicia")["valor_usd"].sum().sort_values(ascending=False)
+        total = fr.sum() or 1
+        orden = [x for x in fr.index if x != "Sin franquicia"] + (["Sin franquicia"] if "Sin franquicia" in fr.index else [])
+        franquicias = [{"franquicia": k, "valor_usd": _num(fr[k]), "participacion": _num(fr[k] / total * 100, 1)} for k in orden]
+
+    canales = []
+    if len(act):
+        ea = embarques(act)
+        c = ea[ea["canal"] != "Sin dato"]["canal"].value_counts()
+        canales = [{"canal": k, "embarques": int(v)} for k, v in c.items()]
 
     return {
         "periodo": {"desde": f.desde.isoformat(), "hasta": f.hasta.isoformat(),
                     "anterior_desde": prev_desde.isoformat(), "anterior_hasta": prev_hasta.isoformat()},
-        "sla_dias": sla,
-        "resumen": {"en_curso": int(len(abiertas)), "retrasadas": int(len(retrasadas)),
-                    "valor_en_curso_usd": _num(abiertas["valor_usd"].sum())},
+        "resumen": {
+            "en_curso": int(len(abiertos)),
+            "valor_en_curso_usd": _num(abiertos["valor_usd"].sum()) if len(abiertos) else 0,
+            "contenedores_en_curso": int(abiertos["contenedores"].sum()) if len(abiertos) else 0,
+            "con_alerta": len(alertas),
+        },
         "kpis": kpis,
         "mensual": mensual,
-        "estados": estados,
-        "top_clientes": top_clientes,
-        "aduanas": aduanas,
-        "paises": paises,
-        "modalidades": modalidades,
-        "alertas": alertas,
+        "rutas_top": rutas_top,
+        "pipeline": pipeline,
+        "etapas": etapas,
+        "rutas": rutas,
+        "navieras": navieras,
+        "franquicias": franquicias,
+        "canales": canales,
+        "alertas": alertas[:15],
+        "proximos": proximos,
     }
 
 
 def opciones_filtros(df: pd.DataFrame) -> dict:
-    def uniq(c):
-        return sorted(v for v in df[c].dropna().unique().tolist() if v and v != "Sin dato")
-
+    dims = []
+    for key, col, label in DIMENSIONES:
+        vals = sorted(v for v in df[col].dropna().unique().tolist() if v not in ("Sin dato",))
+        dims.append({"key": key, "label": label, "opciones": vals})
     return {
-        "tipos": uniq("tipo"), "clientes": uniq("cliente"), "aduanas": uniq("aduana"), "modalidades": uniq("modalidad"),
-        "fecha_min": df["fecha_apertura"].min().date().isoformat() if len(df) else None,
-        "fecha_max": df["fecha_apertura"].max().date().isoformat() if len(df) else None,
+        "dimensiones": dims,
+        "estados": [e[1] for e in ESTADOS],
+        "fecha_min": df["fecha_ref"].min().date().isoformat() if len(df) else None,
+        "fecha_max": df["fecha_ref"].max().date().isoformat() if len(df) else None,
     }
 
 
-TABLA_COLS = ["do", "fecha_apertura", "tipo", "cliente", "pais", "aduana", "modalidad", "categoria",
-              "valor_usd", "tributos_cop", "estado", "fecha_llegada", "fecha_levante", "dias_tramite", "ejecutivo"]
+TABLA_COLS = ["embarque", "estado", "ruta", "modo_txt", "forwarder", "naviera", "contenedores", "lineas", "valor_usd",
+              "pickup", "atd", "eta", "ata", "despacho", "sap", "pdt", "meta_pdt"]
 
 
-def operaciones(df: pd.DataFrame, f: Filtros, q: str = "", estado: str | None = None,
-                orden: str = "fecha_apertura", desc: bool = True, pagina: int = 1, tamano: int = 25) -> dict:
+def lista_embarques(df: pd.DataFrame, f: Filtros, q: str = "", estado: str | None = None,
+                    orden: str = "fecha_ref", desc: bool = True, pagina: int = 1, tamano: int = 25) -> dict:
     d = _periodo(_dims(df, f), f.desde, f.hasta)
-    if estado:
-        d = d[d["estado"] == estado]
     if q:
         ql = q.lower()
         m = pd.Series(False, index=d.index)
-        for c in ("do", "cliente", "pais", "aduana", "ejecutivo", "categoria"):
-            m |= d[c].astype(str).str.lower().str.contains(ql, regex=False)
-        d = d[m]
-    if orden in TABLA_COLS:
-        d = d.sort_values(orden, ascending=not desc, na_position="last")
-    total = len(d)
-    page = d.iloc[(pagina - 1) * tamano: pagina * tamano][TABLA_COLS].copy()
-    for c in ("fecha_apertura", "fecha_llegada", "fecha_levante"):
-        page[c] = page[c].dt.strftime("%Y-%m-%d")
-    page = page.astype(object).where(page.notna(), None)
-    rows = page.to_dict(orient="records")
-    for r in rows:
-        r["valor_usd"] = _num(r["valor_usd"])
-        r["tributos_cop"] = _num(r["tributos_cop"], 0)
-        r["dias_tramite"] = _num(r["dias_tramite"], 1)
-    return {"total": total, "pagina": pagina, "tamano": tamano, "filas": rows}
+        for c in ("embarque", "shipment_ref", "booking", "po", "contenedor", "sku", "material", "ruta", "naviera"):
+            m |= d[c].astype("string").str.lower().str.contains(ql, regex=False).fillna(False)
+        d = d[d["embarque"].isin(d.loc[m, "embarque"])]
+    e = embarques(d)
+    if len(e) and estado:
+        e = e[e["estado"] == estado]
+    total = len(e)
+    if not total:
+        return {"total": 0, "pagina": pagina, "tamano": tamano, "filas": []}
+    clave = "orden_estado" if orden == "estado" else orden
+    if clave in e.columns:
+        e = e.sort_values(clave, ascending=not desc, na_position="last")
+    page = e.iloc[(pagina - 1) * tamano: pagina * tamano].reset_index()
+    filas = []
+    for r in page.itertuples(index=False):
+        row = r._asdict()
+        filas.append({
+            "embarque": row["embarque"], "estado": row["estado"], "ruta": row["ruta"], "modo": row["modo_txt"],
+            "forwarder": row["forwarder"], "naviera": row["naviera"], "contenedores": int(row["contenedores"]),
+            "lineas": int(row["lineas"]), "valor_usd": _num(row["valor_usd"]),
+            **{h: _iso(row[h]) for h in ("pickup", "atd", "eta", "ata", "despacho", "sap")},
+            "pdt": _num(row["pdt"], 1), "meta_pdt": _num(row["meta_pdt"], 1),
+        })
+    return {"total": total, "pagina": pagina, "tamano": tamano, "filas": filas}
+
+
+def detalle_embarque(df: pd.DataFrame, embarque: str, hoy: date | None = None) -> dict | None:
+    d = df[df["embarque"] == embarque]
+    if d.empty:
+        return None
+    e = embarques(d).iloc[0]
+    u = unidades(d)
+    hoy_ts = pd.Timestamp(hoy or date.today())
+    etapas = []
+    for k, label, ini, fin in ETAPAS:
+        real = u[f"d_{k}"].mean()
+        inicio, cierre = e[ini], e[fin]
+        en_curso = pd.notna(inicio) and pd.isna(cierre) and ESTADO_ETAPA.get(e["estado"]) == k
+        if en_curso:
+            real = (hoy_ts - inicio).total_seconds() / 86400
+        etapas.append({"key": k, "label": label, "inicio": _iso(inicio), "fin": _iso(cierre),
+                       "real": _num(real, 1), "meta": _num(e[f"m_{k}"], 1), "en_curso": bool(en_curso)})
+    lineas = d.sort_values(["po", "sku"])[["po", "sku", "material", "franquicia", "cantidad", "valor_usd", "contenedor"]]
+    lineas = lineas.astype(object).where(lineas.notna(), None).to_dict(orient="records")
+    for li in lineas:
+        li["valor_usd"] = _num(li["valor_usd"])
+        li["cantidad"] = _num(li["cantidad"], 0)
+    return {
+        "embarque": embarque, "estado": e["estado"], "ruta": e["ruta"], "modo": e["modo_txt"],
+        "forwarder": e["forwarder"], "naviera": e["naviera"], "agente_aduana": e["agente_aduana"], "canal": e["canal"],
+        "documento_transporte": e["shipment_ref"], "booking": e["booking"],
+        "contenedores": sorted(d["contenedor"].dropna().unique().tolist()),
+        "valor_usd": _num(e["valor_usd"]), "pdt": _num(e["pdt"], 1), "meta_pdt": _num(e["meta_pdt"], 1),
+        "meta_oficial": bool(e["meta_oficial"]),
+        "hitos": {h: _iso(e[h]) for h in HITOS},
+        "etapas": etapas,
+        "lineas": lineas,
+    }

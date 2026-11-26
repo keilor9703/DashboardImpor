@@ -2,6 +2,10 @@ services:
   api:
     build: ./backend
     env_file: ./backend/.env
+    environment:
+      LOCAL_FILE_PATH: /data/Insumo1.xlsx
+    volumes:
+      - ./Insumos:/data:ro
     restart: unless-stopped
   web:
     build:

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as echarts from "echarts/core";
-import { BarChart, LineChart } from "echarts/charts";
+import { BarChart, LineChart, ScatterChart } from "echarts/charts";
 import { GridComponent, MarkLineComponent, TooltipComponent, DatasetComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsCoreOption } from "echarts/core";
 import { readTokens, useTheme, type Tokens } from "../lib/theme";
 
-echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, MarkLineComponent, DatasetComponent, CanvasRenderer]);
+echarts.use([BarChart, LineChart, ScatterChart, GridComponent, TooltipComponent, MarkLineComponent, DatasetComponent, CanvasRenderer]);
 
 interface Props {
   build: (t: Tokens) => EChartsCoreOption;

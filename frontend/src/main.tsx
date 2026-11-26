@@ -5,7 +5,7 @@ import { AuthProvider, msalInstance, useAuth } from "./auth/AuthProvider";
 import { ThemeProvider } from "./lib/theme";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
-import { Operations } from "./pages/Operations";
+import { Shipments } from "./pages/Shipments";
 import { DataSource } from "./pages/DataSource";
 import { Login } from "./pages/Login";
 import "./styles/app.css";
@@ -18,7 +18,7 @@ function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
-        <Route path="operaciones" element={<Operations />} />
+        <Route path="embarques" element={<Shipments />} />
         <Route path="fuente" element={<DataSource />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

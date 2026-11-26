@@ -26,19 +26,19 @@ export const PRESETS: { id: Exclude<Preset, "custom">; label: string }[] = [
   { id: "12m", label: "12 meses" },
 ];
 
+export const DIM_KEYS = ["modo", "origen", "destino", "franquicia", "forwarder"] as const;
+export const DEFAULT_PRESET: Exclude<Preset, "custom"> = "ytd";
+
 /** Filtros globales guardados en la URL (se pueden compartir como enlace). */
 export function useFilters() {
   const [sp, setSp] = useSearchParams();
-  const def = presetRange("12m");
+  const def = presetRange(DEFAULT_PRESET);
 
-  const filters: Filters = useMemo(() => ({
-    desde: sp.get("desde") ?? def.desde,
-    hasta: sp.get("hasta") ?? def.hasta,
-    tipo: sp.get("tipo") ?? "",
-    cliente: sp.get("cliente") ?? "",
-    aduana: sp.get("aduana") ?? "",
-    modalidad: sp.get("modalidad") ?? "",
-  }), [sp, def.desde, def.hasta]);
+  const filters: Filters = useMemo(() => {
+    const f: Filters = { desde: sp.get("desde") ?? def.desde, hasta: sp.get("hasta") ?? def.hasta };
+    DIM_KEYS.forEach((k) => (f[k] = sp.get(k) ?? ""));
+    return f;
+  }, [sp, def.desde, def.hasta]);
 
   const preset: Preset = useMemo(() => {
     const hit = PRESETS.find((p) => {
@@ -57,7 +57,7 @@ export function useFilters() {
   }, [setSp]);
 
   const reset = useCallback(() => setSp(new URLSearchParams(), { replace: true }), [setSp]);
-  const active = !!(filters.tipo || filters.cliente || filters.aduana || filters.modalidad || preset !== "12m");
+  const active = DIM_KEYS.some((k) => filters[k]) || preset !== DEFAULT_PRESET;
 
   return { filters, preset, update, reset, active };
 }

@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 import httpx
 import pandas as pd
+from python_calamine import CalamineWorkbook
 
 from ..config import Settings
 from . import mock
@@ -19,8 +20,35 @@ from . import mock
 GRAPH = "https://graph.microsoft.com/v1.0"
 
 
+def read_sheet(src, sheet: str, max_empty: int = 500) -> tuple[pd.DataFrame, int]:
+    """Lee una hoja con calamine (rápido) y se detiene al terminar los datos reales.
+
+    Los Excel con miles de filas "vacías" pero con formato son comunes; recorrerlas
+    con openpyxl o pandas toma minutos. Devuelve (DataFrame, filas declaradas en la hoja).
+    """
+    wb = CalamineWorkbook.from_filelike(src) if hasattr(src, "read") else CalamineWorkbook.from_path(str(src))
+    names = wb.sheet_names
+    if sheet not in names:
+        raise ValueError(f"No existe la hoja «{sheet}». Hojas disponibles: {names}")
+    sh = wb.get_sheet_by_name(sheet)
+    it = sh.iter_rows()
+    header = [str(h).strip() for h in next(it)]
+    rows, empty = [], 0
+    for r in it:
+        if r[0] in ("", None):
+            empty += 1
+            if empty > max_empty:
+                break
+            continue
+        empty = 0
+        rows.append(r)
+    df = pd.DataFrame(rows, columns=header).replace("", None)
+    return df, sh.height - 1
+
+
 class DataSource(ABC):
     name: str
+    raw_rows: int = 0
 
     @abstractmethod
     def fetch(self) -> pd.DataFrame: ...
@@ -33,7 +61,9 @@ class MockSource(DataSource):
     name = "mock"
 
     def fetch(self) -> pd.DataFrame:
-        return mock.generate()
+        df = mock.generate()
+        self.raw_rows = len(df)
+        return df
 
     def describe(self) -> dict:
         return {"tipo": self.name, "detalle": "Datos simulados (sin conexión a SharePoint)"}
@@ -46,7 +76,8 @@ class FileSource(DataSource):
         self.path, self.sheet = path, sheet
 
     def fetch(self) -> pd.DataFrame:
-        return pd.read_excel(self.path, sheet_name=self.sheet)
+        df, self.raw_rows = read_sheet(self.path, self.sheet)
+        return df
 
     def describe(self) -> dict:
         return {"tipo": self.name, "detalle": f"{self.path} · hoja «{self.sheet}»"}
@@ -102,7 +133,8 @@ class GraphExcelSource(DataSource):
 
             if self.s.graph_read_mode == "download":
                 content = self._get(client, f"{base}/content").content
-                return pd.read_excel(io.BytesIO(content), sheet_name=self.s.excel_sheet_name)
+                df, self.raw_rows = read_sheet(io.BytesIO(content), self.s.excel_sheet_name)
+                return df
 
             if self.s.excel_table_name:
                 url = f"{base}/workbook/tables/{quote(self.s.excel_table_name)}/range?$select=values"
@@ -110,6 +142,7 @@ class GraphExcelSource(DataSource):
                 url = f"{base}/workbook/worksheets/{quote(self.s.excel_sheet_name)}/usedRange(valuesOnly=true)?$select=values"
             values = self._get(client, url).json()["values"]
         header, *rows = values
+        self.raw_rows = len(rows)
         return pd.DataFrame(rows, columns=header)
 
     def describe(self) -> dict:

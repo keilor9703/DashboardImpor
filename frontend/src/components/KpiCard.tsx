@@ -26,7 +26,7 @@ export function KpiCard({ kpi, color }: { kpi: Kpi; color: "s1" | "s2" | "text2"
             {Math.abs(d).toLocaleString("es-CO", { maximumFractionDigits: 1 })} %
           </span>
         )}
-        <span>vs. {formatValue(kpi.previous, kpi.format)} ant.</span>
+        <span>{kpi.previous ? `vs. ${formatValue(kpi.previous, kpi.format)} período ant.` : "Sin datos del período anterior"}</span>
       </div>
       <div className="spark">
         <EChart ariaLabel={`Tendencia mensual de ${kpi.label}`} height={36}

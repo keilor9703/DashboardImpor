@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  BarChart3, Building2, Database, FileText, LogOut, Menu, Moon, RefreshCw, Ship, Sun, Table2, Warehouse,
+  BarChart3, Database, FileText, LogOut, Menu, Moon, RefreshCw, Ship, Sun, Table2, Warehouse,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import { apiPost, useApi } from "../api/client";
@@ -15,10 +15,18 @@ const Sync = createContext<SyncCtx>({ version: 0, refreshing: false, refresh: as
 export const useSync = () => useContext(Sync);
 const AUTO_REFRESH_MS = 2 * 60 * 1000;
 
+/** Conserva los filtros al cambiar de página, pero no el embarque abierto. */
+function keepFilters(search: string) {
+  const p = new URLSearchParams(search);
+  p.delete("id");
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+
 const PAGES: Record<string, { title: string; subtitle: string }> = {
-  "/": { title: "Resumen ejecutivo", subtitle: "Indicadores clave de la operación de comercio exterior" },
-  "/operaciones": { title: "Operaciones", subtitle: "Detalle de cada DO con búsqueda y filtros" },
-  "/fuente": { title: "Fuente de datos", subtitle: "Estado de la conexión con el Excel en SharePoint" },
+  "/": { title: "Torre de control", subtitle: "Seguimiento logístico de exportaciones e importaciones" },
+  "/embarques": { title: "Embarques", subtitle: "Detalle de cada embarque, hitos y productos" },
+  "/fuente": { title: "Fuente y calidad de datos", subtitle: "Conexión con el Excel y hallazgos de calidad" },
 };
 
 export function Layout() {
@@ -62,18 +70,17 @@ export function Layout() {
           </div>
           <nav className="nav">
             <div className="nav-label">Análisis</div>
-            <NavLink to={{ pathname: "/", search: loc.search }} end><BarChart3 size={18} /> Resumen ejecutivo</NavLink>
-            <NavLink to={{ pathname: "/operaciones", search: loc.search }}><Table2 size={18} /> Operaciones</NavLink>
-            <a aria-disabled="true"><Building2 size={18} /> Clientes <span className="soon">Pronto</span></a>
+            <NavLink to={{ pathname: "/", search: keepFilters(loc.search) }} end><BarChart3 size={18} /> Torre de control</NavLink>
+            <NavLink to={{ pathname: "/embarques", search: keepFilters(loc.search) }}><Table2 size={18} /> Embarques</NavLink>
             <a aria-disabled="true"><Warehouse size={18} /> Aduanas <span className="soon">Pronto</span></a>
             <a aria-disabled="true"><FileText size={18} /> Reportes <span className="soon">Pronto</span></a>
             <div className="nav-label">Sistema</div>
-            <NavLink to="/fuente"><Database size={18} /> Fuente de datos</NavLink>
+            <NavLink to="/fuente"><Database size={18} /> Fuente y calidad</NavLink>
           </nav>
           <div className="sidebar-foot">
             <span className={`sync-dot ${fuente?.error ? "off" : ""}`} />
-            {fuente?.tipo === "graph" ? "SharePoint conectado" : fuente?.tipo === "file" ? "Archivo local" : "Datos simulados"}
-            <div style={{ marginTop: 4 }}>{fuente ? `${fuente.filas.toLocaleString("es-CO")} registros` : "…"}</div>
+            {fuente?.tipo === "graph" ? "SharePoint conectado" : fuente?.tipo === "file" ? "Archivo Excel" : "Datos simulados"}
+            <div style={{ marginTop: 4 }}>{fuente ? `${fuente.embarques.toLocaleString("es-CO")} embarques · ${fuente.filas.toLocaleString("es-CO")} líneas` : "…"}</div>
           </div>
         </aside>
 

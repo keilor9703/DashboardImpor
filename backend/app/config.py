@@ -37,14 +37,16 @@ class Settings(BaseSettings):
     sharepoint_site_path: str = ""         # ej. /sites/Operaciones
     sharepoint_file_path: str = ""         # ej. /Consolidados/Operaciones 2026.xlsx
     excel_table_name: str = ""             # Tabla de Excel (recomendado)
-    excel_sheet_name: str = "Consolidado"  # Si no hay tabla, se usa la hoja
-    # "workbook": API de Excel de Graph. "download": descarga el .xlsx y lo procesa.
-    graph_read_mode: Literal["workbook", "download"] = "workbook"
+    excel_sheet_name: str = "Sheet1"       # Si no hay tabla, se usa la hoja
+    # "download": descarga el .xlsx y lo procesa (recomendado: el archivo es grande).
+    # "workbook": API de Excel de Graph (solo si la hoja está limpia o es una Tabla).
+    graph_read_mode: Literal["workbook", "download"] = "download"
 
     local_file_path: str = ""
 
     # ---------- Reglas de negocio ----------
-    sla_dias_tramite: float = 5.0  # meta de días de nacionalización / despacho
+    trm_cop_usd: float = 4000.0  # TRM para convertir valores en COP a USD
+    eur_usd: float = 1.08
 
     @property
     def cors_origin_list(self) -> list[str]:

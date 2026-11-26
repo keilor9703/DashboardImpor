@@ -1,8 +1,39 @@
-# ComEx Analytics: tablero directivo de comercio exterior
+# ComEx Analytics: torre de control logística
 
-Dashboard web que lee en tiempo real la hoja consolidada de un Excel alojado en
-**SharePoint (Microsoft 365)** y la convierte en indicadores, gráficos y alertas
-para la gerencia. El acceso se hace con la **cuenta corporativa de Microsoft**.
+Dashboard web que lee el Excel de seguimiento logístico alojado en **SharePoint
+(Microsoft 365)** y lo convierte en indicadores, gráficos y alertas para la
+gerencia. El acceso se hace con la **cuenta corporativa de Microsoft**.
+
+## Qué muestra (fase 2, con el Excel real `Insumos/Insumo1.xlsx`)
+
+- **KPIs:** embarques, valor movilizado (USD), contenedores, lead time total (PDT),
+  cumplimiento de PDT y tiempo de nacionalización. Cada uno con su variación
+  frente al período anterior y su tendencia mensual.
+- **Torre de control:** embarques abiertos por estado (pendiente de recogida →
+  pendiente de zarpe → tránsito internacional → en nacionalización → pendiente
+  de entrega → ingresado a SAP).
+- **Lead time por etapa vs. meta**, por ruta: gestión de la orden, transporte a
+  puerto, tránsito internacional, nacionalización, transporte local e ingreso a SAP.
+  Replica la hoja «In Transit PDT».
+- **Desempeño por ruta**, **próximos arribos**, **embarques fuera de meta**,
+  tránsito por naviera, valor por franquicia y canal aduanero.
+- **Embarques:** tabla con búsqueda (embarque, PO, contenedor, SKU, producto) y
+  panel de detalle con hitos, etapas vs. meta, datos logísticos y productos.
+- **Calidad de datos:** hallazgos del Excel que afectan los indicadores.
+
+### Modelo de datos
+
+| Concepto | Regla |
+|---|---|
+| Línea | Una fila de «Sheet1» (SKU / línea de PO). Se ignoran las filas sin «Status». |
+| Embarque | «Export Number»; si no hay, «Shipment Reference»; si no, la PO |
+| Unidad PDT | Embarque + PO (igual que la hoja «In Transit PDT») |
+| Valor USD | Factura impo (USD) → valor PO → factura expo (COP ÷ TRM) |
+| Fecha del período | ATD → Pick Up → First ETD → Expo Month → fecha de la PO |
+| PDT | SAP Entry Date − PO Generation Date |
+| Metas | `backend/app/data/targets.py` (oficiales de «In Transit PDT»; referenciales para rutas sin meta) |
+
+Los encabezados del Excel se mapean en `backend/app/data/schema.py` (`COLUMN_MAP`).
 
 ```
 Excel en SharePoint ──Microsoft Graph (solo lectura)──▶ Backend FastAPI + pandas ──API REST + token──▶ Frontend React + Apache ECharts
@@ -15,8 +46,9 @@ Excel en SharePoint ──Microsoft Graph (solo lectura)──▶ Backend FastAP
 backend/            API en Python (FastAPI)
   app/config.py       Configuración por variables de entorno
   app/auth.py         Validación de tokens de Microsoft Entra ID
-  app/data/schema.py  Mapeo de columnas del Excel → modelo interno  ← ajustar con el Excel real
-  app/data/sources.py Fuentes: mock | file (.xlsx local) | graph (SharePoint)
+  app/data/schema.py  Mapeo de columnas del Excel, limpieza y campos derivados
+  app/data/targets.py Metas de lead time por ruta y etapa
+  app/data/sources.py Fuentes: mock | file (.xlsx local) | graph (SharePoint); lectura rápida con calamine
   app/data/mock.py    Generador de datos simulados
   app/services/       Caché (repository) y cálculo de KPIs (analytics)
   app/routers/        Endpoints /api/*
@@ -30,6 +62,11 @@ docker-compose.yml
 ```
 
 ## Ejecutar en local (modo demo, sin Microsoft)
+
+Por defecto, `.env.example` usa el Excel de `Insumos/Insumo1.xlsx` (`DATA_SOURCE=file`).
+Si ya tenía un `.env` de la fase 1, agregue `DATA_SOURCE=file` y
+`LOCAL_FILE_PATH=../Insumos/Insumo1.xlsx`, e instale de nuevo las dependencias
+(`pip install -r requirements.txt`, se agregó `python-calamine`).
 
 ```bash
 # Backend
@@ -66,10 +103,12 @@ Pruebas del backend: `cd backend && pytest`
 |---|---|---|
 | GET | `/api/health` | Estado del servicio |
 | GET | `/api/me` | Usuario autenticado |
-| GET | `/api/dashboard` | KPIs, series y alertas. Filtros: `desde`, `hasta`, `tipo`, `cliente`, `aduana`, `modalidad` |
+| GET | `/api/dashboard` | KPIs, series y alertas. Filtros: `desde`, `hasta`, `modo`, `origen`, `destino`, `franquicia`, `forwarder` |
 | GET | `/api/filtros` | Valores disponibles para los filtros |
-| GET | `/api/operaciones` | Tabla paginada (`q`, `estado`, `orden`, `desc`, `pagina`, `tamano`) |
+| GET | `/api/embarques` | Tabla paginada de embarques (`q`, `estado`, `orden`, `desc`, `pagina`, `tamano`) |
+| GET | `/api/embarques/{id}` | Detalle: hitos, etapas vs. meta, contenedores y líneas |
 | GET | `/api/datos/estado` | Estado de la fuente de datos y de la última sincronización |
+| GET | `/api/datos/calidad` | Hallazgos de calidad de datos del Excel |
 | POST | `/api/datos/refrescar` | Fuerza la relectura del Excel |
 
 ## Configurar Microsoft Entra ID (login)
@@ -98,12 +137,17 @@ Si `VITE_AZURE_CLIENT_ID` está vacío, el frontend funciona en **modo demo**.
 4. Configurar en `backend/.env`: `DATA_SOURCE=graph`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `SHAREPOINT_HOSTNAME`, `SHAREPOINT_SITE_PATH`, `SHAREPOINT_FILE_PATH`.
 5. Ajustar `COLUMN_MAP` en `backend/app/data/schema.py` para que coincida con los encabezados reales del Excel.
 
-Si el archivo es muy pesado para la API de Excel, use `GRAPH_READ_MODE=download`: descarga el `.xlsx` y lo procesa con pandas.
+El Excel actual declara ~1.045.000 filas, pero solo ~1.300 tienen datos (el resto son
+filas vacías con formato). Por eso el modo por defecto es `GRAPH_READ_MODE=download`:
+descarga el `.xlsx` y lo lee con calamine, que se detiene al terminar los datos
+(unos 7 s, frente a unos 50 s con pandas). **Se recomienda eliminar esas filas
+sobrantes del archivo:** pasaría de 23 MB a menos de 1 MB y la sincronización sería casi instantánea.
 Para probar con una copia local del archivo, use `DATA_SOURCE=file` y `LOCAL_FILE_PATH`.
 
 ## Actualización de los datos
 
 - El backend guarda el Excel en caché durante `CACHE_TTL_SECONDS` (120 s por defecto).
+  Al vencer, sigue respondiendo con los datos actuales mientras relee el archivo en segundo plano.
 - El frontend se refresca solo cada 2 minutos. El botón ⟳ fuerza la sincronización.
 - Si una lectura falla, se siguen mostrando los últimos datos válidos y se indica el error.
 - Fase 5: suscripción a notificaciones de cambio de Microsoft Graph (webhook) para actualizar en cuanto se guarde el Excel.
@@ -111,7 +155,7 @@ Para probar con una copia local del archivo, use `DATA_SOURCE=file` y `LOCAL_FIL
 ## Hoja de ruta
 
 1. ✅ Base del proyecto, login Microsoft, dashboard con datos simulados
-2. ⏳ Conexión a SharePoint vía Graph (código listo; faltan credenciales de la empresa)
-3. ⏳ Mapeo de columnas reales y KPIs acordados con la gerencia
-4. ⏳ Vistas Clientes, Aduanas y Reportes, y exportación a PDF/Excel
+2. ✅ Modelo de datos del Excel real, torre de control logística, PDT vs. meta, calidad de datos
+3. ⏳ Conexión a SharePoint vía Graph (código listo; faltan credenciales de la empresa) y validación de KPIs con la gerencia
+4. ⏳ Vistas Aduanas y Reportes, exportación a PDF/Excel e histórico de PDT
 5. ⏳ Webhooks de Graph, histórico de KPIs (PostgreSQL), despliegue en Azure

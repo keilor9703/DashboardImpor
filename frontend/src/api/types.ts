@@ -13,30 +13,78 @@ export interface Kpi {
 
 export interface MesPunto {
   mes: string;
-  operaciones: number;
-  importaciones_usd: number;
-  exportaciones_usd: number;
-  tributos_cop: number;
-  dias_tramite: number | null;
-  cumplimiento_sla: number | null;
+  embarques: number;
+  valor_usd: number;
+  rutas: Record<string, number>;
 }
 
 export interface Alerta {
-  do: string;
-  cliente: string;
-  tipo: string;
-  aduana: string;
+  embarque: string;
   estado: string;
+  ruta: string;
+  modo: string;
+  etapa: string;
   dias: number;
+  meta: number;
+  exceso: number;
   valor_usd: number;
-  ejecutivo: string;
+  contenedores: number;
+  forwarder: string;
+  meta_oficial: boolean;
   severidad: "critical" | "serious";
+}
+
+export interface Arribo {
+  embarque: string;
+  estado: string;
+  ruta: string;
+  modo: string;
+  eta: string;
+  dias: number;
+  naviera: string;
+  contenedores: number;
+  valor_usd: number;
+}
+
+export interface EtapaValor {
+  key: string;
+  label: string;
+  real: number | null;
+  meta: number | null;
+  n: number;
+}
+
+export interface RutaEtapas {
+  id: string;
+  ruta: string;
+  modo: string;
+  unidades: number;
+  pdt_real: number | null;
+  pdt_meta: number | null;
+  etapas: EtapaValor[];
+}
+
+export interface RutaResumen {
+  ruta: string;
+  modo: string;
+  embarques: number;
+  en_curso: number;
+  valor_usd: number;
+  contenedores: number;
+  pdt_promedio: number | null;
+  meta_pdt: number | null;
+  meta_oficial: boolean;
+  cumplimiento: number | null;
+  transito_promedio: number | null;
 }
 
 export interface FuenteEstado {
   tipo: "mock" | "graph" | "file";
   detalle: string;
   filas: number;
+  filas_archivo: number;
+  embarques: number;
+  segundos_carga: number;
   ultima_actualizacion: string | null;
   ttl_segundos: number;
   error: string | null;
@@ -44,58 +92,90 @@ export interface FuenteEstado {
 
 export interface DashboardData {
   periodo: { desde: string; hasta: string; anterior_desde: string; anterior_hasta: string };
-  sla_dias: number;
-  resumen: { en_curso: number; retrasadas: number; valor_en_curso_usd: number };
+  resumen: { en_curso: number; valor_en_curso_usd: number; contenedores_en_curso: number; con_alerta: number };
   kpis: Kpi[];
   mensual: MesPunto[];
-  estados: { estado: string; operaciones: number; valor_usd: number }[];
-  top_clientes: { cliente: string; valor_usd: number; operaciones: number; participacion: number }[];
-  aduanas: { aduana: string; operaciones: number; dias_promedio: number; cumplimiento_sla: number }[];
-  paises: { pais: string; importaciones_usd: number; exportaciones_usd: number }[];
-  modalidades: { modalidad: string; operaciones: number; valor_usd: number }[];
+  rutas_top: string[];
+  pipeline: { estado: string; embarques: number; valor_usd: number; contenedores: number }[];
+  etapas: RutaEtapas[];
+  rutas: RutaResumen[];
+  navieras: { naviera: string; embarques: number; transito_promedio: number | null; valor_usd: number }[];
+  franquicias: { franquicia: string; valor_usd: number; participacion: number }[];
+  canales: { canal: string; embarques: number }[];
   alertas: Alerta[];
+  proximos: Arribo[];
   fuente: FuenteEstado;
 }
 
+export interface Dimension {
+  key: string;
+  label: string;
+  opciones: string[];
+}
+
 export interface OpcionesFiltros {
-  tipos: string[];
-  clientes: string[];
-  aduanas: string[];
-  modalidades: string[];
+  dimensiones: Dimension[];
+  estados: string[];
   fecha_min: string | null;
   fecha_max: string | null;
 }
 
-export interface Operacion {
-  do: string;
-  fecha_apertura: string;
-  tipo: string;
-  cliente: string;
-  pais: string;
-  aduana: string;
-  modalidad: string;
-  categoria: string;
-  valor_usd: number;
-  tributos_cop: number;
+export interface EmbarqueFila {
+  embarque: string;
   estado: string;
-  fecha_llegada: string | null;
-  fecha_levante: string | null;
-  dias_tramite: number | null;
-  ejecutivo: string;
+  ruta: string;
+  modo: string;
+  forwarder: string;
+  naviera: string;
+  contenedores: number;
+  lineas: number;
+  valor_usd: number;
+  pickup: string | null;
+  atd: string | null;
+  eta: string | null;
+  ata: string | null;
+  despacho: string | null;
+  sap: string | null;
+  pdt: number | null;
+  meta_pdt: number | null;
 }
 
-export interface OperacionesPage {
+export interface EmbarquesPage {
   total: number;
   pagina: number;
   tamano: number;
-  filas: Operacion[];
+  filas: EmbarqueFila[];
 }
 
-export interface Filters {
-  desde: string;
-  hasta: string;
-  tipo: string;
-  cliente: string;
-  aduana: string;
-  modalidad: string;
+export interface EmbarqueDetalle {
+  embarque: string;
+  estado: string;
+  ruta: string;
+  modo: string;
+  forwarder: string;
+  naviera: string;
+  agente_aduana: string;
+  canal: string;
+  documento_transporte: string | null;
+  booking: string | null;
+  contenedores: string[];
+  valor_usd: number;
+  pdt: number | null;
+  meta_pdt: number | null;
+  meta_oficial: boolean;
+  hitos: Record<string, string | null>;
+  etapas: { key: string; label: string; inicio: string | null; fin: string | null; real: number | null; meta: number | null; en_curso: boolean }[];
+  lineas: { po: string | null; sku: string | null; material: string | null; franquicia: string; cantidad: number | null; valor_usd: number; contenedor: string | null }[];
 }
+
+export interface Hallazgo {
+  clave: string;
+  titulo: string;
+  cantidad: number;
+  porcentaje: number | null;
+  detalle: string;
+  nivel: "info" | "warning" | "serious";
+}
+
+/** Filtros globales: fechas + dimensiones dinámicas (modo, origen, destino, franquicia, forwarder). */
+export type Filters = { desde: string; hasta: string } & Record<string, string>;
