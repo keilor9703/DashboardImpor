@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  BarChart3, Database, FileText, LogOut, Menu, Moon, RefreshCw, Sun, Table2, Warehouse,
+  BarChart3, Database, LogOut, Timer, Menu, Moon, RefreshCw, Sun, Table2, Warehouse,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import { CLIENTE, ClientLogo, DevCredit, PRODUCTO, ProductLogo } from "./Brand";
@@ -27,6 +27,7 @@ function keepFilters(search: string) {
 const PAGES: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "Torre de control", subtitle: "Seguimiento logístico de exportaciones e importaciones" },
   "/embarques": { title: "Embarques", subtitle: "Detalle de cada embarque, hitos y productos" },
+  "/pdt": { title: "PDT", subtitle: "Lead time de punta a punta por proceso · hoja In Transit PDT" },
   "/fuente": { title: "Fuente y calidad de datos", subtitle: "Conexión con el Excel y hallazgos de calidad" },
 };
 
@@ -73,7 +74,8 @@ export function Layout() {
             <NavLink to={{ pathname: "/", search: keepFilters(loc.search) }} end><BarChart3 size={18} /> Torre de control</NavLink>
             <NavLink to={{ pathname: "/embarques", search: keepFilters(loc.search) }}><Table2 size={18} /> Embarques</NavLink>
             <a aria-disabled="true"><Warehouse size={18} /> Aduanas <span className="soon">Pronto</span></a>
-            <a aria-disabled="true"><FileText size={18} /> Reportes <span className="soon">Pronto</span></a>
+            <div className="nav-label">Reportes</div>
+            <NavLink to="/pdt"><Timer size={18} /> PDT</NavLink>
             <div className="nav-label">Sistema</div>
             <NavLink to="/fuente"><Database size={18} /> Fuente y calidad</NavLink>
           </nav>

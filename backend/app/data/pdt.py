@@ -25,6 +25,28 @@ TITULOS_ES = {
 }
 
 
+# Clasificación de los comentarios en causas de incumplimiento (primera regla que coincide).
+# Para ajustar una categoría basta con editar sus palabras clave.
+CAUSAS = [
+    ("Error en SAP", ["migo", "error al ingresar", "no se logra grabar", "quedan en hold"]),
+    ("Pesos, BL o documentos", ["peso", " bl", "bl ", "documento", "factura", "cpi", "dai", "inspecc", "declaraci"]),
+    ("Naviera / tiempo de tránsito", ["naviera", " tt", "cma", "cosco", "hapag", "msc", "maersk", "reserva", "roleo", "motonave", "zarpe", "etd",
+                                      "itinerario", "aerol", "vuelo", "eta "]),
+    ("Liberación y aprobaciones", ["liberaci", "aprobaci", "calidad", "firma", "autoriza"]),
+    ("Capacidad y disponibilidad", ["capacidad", "recepci", "prioriz", "simult", "volumen", "volúmen",
+                                    "disponibilidad", "transportist", "consolidar", "no se alcanz"]),
+    ("Fin de semana o feriado", ["fin de semana", "feriado", "festivo", "sábado", "domingo"]),
+]
+OTRAS = "Otras causas"
+
+
+def clasificar_causa(texto) -> str | None:
+    if not texto or not isinstance(texto, str):
+        return None
+    t = f" {texto.lower()} "
+    return next((nombre for nombre, claves in CAUSAS if any(k in t for k in claves)), OTRAS)
+
+
 def _norm(h) -> str:
     return " ".join(str(h or "").split())
 
@@ -95,9 +117,13 @@ def parse(header: list, rows: list) -> dict:
         medidas = [d for d in desv if d is not None]
         reales = [r for r in real if r is not None]
         metas = [m for m in meta if m is not None]
+        coment_idx = next((c["idx"] for c in cols if c["label"].lower().startswith("comentario")), None)
+        fechas = [c["idx"] for c in cols if c["tipo"] == "fecha"]
         procesos.append({
             "key": f"p{n + 1}", "titulo": header[a], "titulo_es": TITULOS_ES.get(header[a], header[a]),
             "color": COLORES[n % len(COLORES)], "columnas": cols,
+            "roles": {"real": a, "meta": a + 1 if b - a > 1 else None, "desviacion": desv_idx,
+                      "comentario": coment_idx, "fecha_fin": fechas[-1] if fechas else None},
             "resumen": {
                 "real_promedio": round(sum(reales) / len(reales), 1) if reales else None,
                 "meta_promedio": round(sum(metas) / len(metas), 1) if metas else None,
@@ -114,6 +140,9 @@ def parse(header: list, rows: list) -> dict:
     validos = [t for t in totales if t is not None]
     total = {
         "key": "total", "titulo": "Total PDT", "titulo_es": "Total PDT", "color": COLOR_TOTAL, "columnas": total_cols,
+        "roles": {"real": i_total if i_total < len(header) else None,
+                  "meta": i_total + 1 if i_total + 1 < len(header) else None,
+                  "desviacion": None, "comentario": None, "fecha_fin": None},
         "resumen": {
             "real_promedio": round(sum(validos) / len(validos), 1) if validos else None,
             "meta_promedio": round(sum(m for _, m in pares) / len(pares), 1) if pares else None,
@@ -122,7 +151,33 @@ def parse(header: list, rows: list) -> dict:
             "sin_registro": sum(1 for t in totales if t is None),
         },
     }
-    return {"identidad": identidad, "procesos": procesos, "total": total, "filas": filas, "registros": len(filas)}
+    def buscar(*nombres):
+        return next((c["idx"] for c in identidad if c["label"].lower() in nombres), None)
+
+    roles = {
+        "status": buscar("status"),
+        "embarque": buscar("shipment reference"),
+        "origen": buscar("country of departure"),
+        "destino": buscar("country of arrival", "final country destination"),
+        "po": buscar("po number"),
+    }
+
+    # Valores numéricos ya interpretados por fila (p. ej. «BE = 140» -> 140, «Sin Registro» -> null),
+    # para que el frontend calcule indicadores sin volver a interpretar textos.
+    def n(f, i):
+        return None if i is None else _num(f[i])
+
+    medidas = []
+    for f, t, m in zip(filas, totales, metas_t):
+        medidas.append({
+            "procesos": [[n(f, p["roles"]["real"]), n(f, p["roles"]["meta"]), n(f, p["roles"]["desviacion"])] for p in procesos],
+            "total": [t, m],
+            "causas": [clasificar_causa(f[p["roles"]["comentario"]]) if p["roles"]["comentario"] is not None else None
+                       for p in procesos],
+        })
+    return {"identidad": identidad, "roles": roles, "procesos": procesos, "total": total,
+            "filas": filas, "medidas": medidas, "registros": len(filas),
+            "causas": [c for c, _ in CAUSAS] + [OTRAS]}
 
 
 def desde_modelo(df: pd.DataFrame) -> tuple[list, list]:

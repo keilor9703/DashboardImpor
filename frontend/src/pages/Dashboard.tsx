@@ -1,14 +1,12 @@
-import { useEffect, useState } from "react";
 import { AlertTriangle, CircleAlert, Info, Ship } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useApi } from "../api/client";
 import type { DashboardData, RutaResumen } from "../api/types";
 import { EChart } from "../charts/EChart";
-import { carriers, franchises, monthlyByRoute, pipeline, stagesBullet } from "../charts/options";
+import { carriers, franchises, monthlyByRoute, pipeline } from "../charts/options";
 import { Card, useSync } from "../components/Layout";
 import { FilterBar } from "../components/FilterBar";
 import { KpiCard } from "../components/KpiCard";
-import { PdtSheetCard } from "../components/PdtSheetCard";
 import { days, int, pct, usd } from "../lib/format";
 import { useFilters } from "../lib/filters";
 
@@ -53,16 +51,20 @@ export function Dashboard() {
                 build={(t) => pipeline(data.pipeline, t)} deps={[data.pipeline]} />
             </Card>
 
-            <PdtSheetCard />
-
-            <StagesCard data={data} />
-
             <Card className="span-5" title="Próximos arribos" subtitle="Embarques por llegar, según ETA vigente">
               <Arribos data={data} />
             </Card>
 
+            <Card className="span-7" title="Valor por franquicia" subtitle="USD · en gris, líneas sin franquicia en el Excel">
+              {data.franquicias.length ? (
+                <EChart ariaLabel="Valor por franquicia" height={Math.max(160, data.franquicias.length * 30)}
+                  build={(t) => franchises(data.franquicias, t)} deps={[data.franquicias]} />
+              ) : <Empty />}
+            </Card>
+
             <Card className="span-12" title="Desempeño por ruta"
-              subtitle="Lead time total (PDT): desde la creación de la PO hasta el ingreso a SAP · unidades cerradas del período">
+              subtitle="Lead time total (PDT): desde la creación de la PO hasta el ingreso a SAP · unidades cerradas del período"
+              actions={<Link className="link-btn" to="/pdt?hoja=indicadores">Ver indicadores de PDT →</Link>}>
               <Rutas rows={data.rutas} />
             </Card>
 
@@ -72,21 +74,15 @@ export function Dashboard() {
               <Alertas data={data} />
             </Card>
 
-            <Card className="span-4" title="Tránsito por naviera" subtitle="Días promedio de zarpe a arribo · (n.º embarques)">
+            <Card className="span-8" title="Tránsito por naviera" subtitle="Días promedio de zarpe a arribo · (n.º embarques)">
               {data.navieras.length ? (
                 <EChart ariaLabel="Tránsito promedio por naviera" height={Math.max(160, data.navieras.length * 38)}
                   build={(t) => carriers(data.navieras, t)} deps={[data.navieras]} />
               ) : <Empty />}
             </Card>
 
-            <Card className="span-5" title="Valor por franquicia" subtitle="USD · en gris, líneas sin franquicia en el Excel">
-              {data.franquicias.length ? (
-                <EChart ariaLabel="Valor por franquicia" height={Math.max(160, data.franquicias.length * 30)}
-                  build={(t) => franchises(data.franquicias, t)} deps={[data.franquicias]} />
-              ) : <Empty />}
-            </Card>
 
-            <Card className="span-3" title="Canal aduanero" subtitle="Embarques nacionalizados">
+            <Card className="span-4" title="Canal aduanero" subtitle="Embarques nacionalizados">
               <Canales data={data.canales} />
             </Card>
           </div>
@@ -101,42 +97,6 @@ function Legend({ items }: { items: string[] }) {
     <div className="legend">
       {items.map((r, i) => <span key={r}><i style={{ background: ROUTE_VARS[i] ?? ROUTE_VARS[3] }} />{r}</span>)}
     </div>
-  );
-}
-
-function StagesCard({ data }: { data: DashboardData }) {
-  const [sel, setSel] = useState(data.etapas[0]?.id ?? "");
-  useEffect(() => {
-    if (!data.etapas.some((e) => e.id === sel)) setSel(data.etapas[0]?.id ?? "");
-  }, [data.etapas, sel]);
-  const ruta = data.etapas.find((e) => e.id === sel) ?? data.etapas[0];
-  const over = ruta?.pdt_real != null && ruta.pdt_meta != null && ruta.pdt_real > ruta.pdt_meta;
-
-  return (
-    <Card className="span-7" title="Lead time por etapa vs. meta"
-      subtitle="Días promedio reales (barra) frente a la meta de cada etapa (marca)"
-      actions={data.etapas.length > 0 && (
-        <select className="select" value={ruta?.id} onChange={(e) => setSel(e.target.value)} aria-label="Ruta">
-          {data.etapas.map((e) => <option key={e.id} value={e.id}>{e.id} ({e.unidades})</option>)}
-        </select>
-      )}>
-      {ruta ? (
-        <>
-          <div className="pdt-summary">
-            <div><span>PDT real</span><b className={over ? "bad" : ""}>{days(ruta.pdt_real)}</b></div>
-            <div><span>Meta PDT</span><b>{days(ruta.pdt_meta)}</b></div>
-            <div><span>Medición</span><b>{int(ruta.unidades)} embarque·PO</b></div>
-            <div className="legend" style={{ marginLeft: "auto" }}>
-              <span><i style={{ background: "var(--serious)" }} />Sobre la meta</span>
-              <span><i style={{ background: "var(--series-muted)" }} />En meta</span>
-              <span><i style={{ background: "var(--text)", width: 3 }} />Meta</span>
-            </div>
-          </div>
-          <EChart ariaLabel={`Lead time por etapa para ${ruta.id}`} height={300}
-            build={(t) => stagesBullet(ruta, t)} deps={[ruta]} />
-        </>
-      ) : <Empty text="No hay rutas con meta oficial en el período." />}
-    </Card>
   );
 }
 

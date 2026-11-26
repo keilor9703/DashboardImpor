@@ -186,19 +186,39 @@ export interface PdtColumna {
   tipo: "dias" | "fecha" | "desviacion" | "texto";
 }
 
+export interface PdtRoles {
+  real: number | null;
+  meta: number | null;
+  desviacion: number | null;
+  comentario: number | null;
+  fecha_fin: number | null;
+}
+
 export interface PdtProceso {
   key: string;
   titulo: string;
   titulo_es: string;
   color: string;
   columnas: PdtColumna[];
+  roles: PdtRoles;
   resumen: { real_promedio: number | null; meta_promedio: number | null; fuera_meta: number; en_meta: number; sin_registro: number };
+}
+
+export interface PdtMedida {
+  /** por proceso: [real, meta, desviación] ya convertidos a número */
+  procesos: [number | null, number | null, number | null][];
+  total: [number | null, number | null];
+  /** causa clasificada del comentario de cada proceso */
+  causas: (string | null)[];
 }
 
 export interface HojaPdt {
   identidad: PdtColumna[];
+  roles: { status: number | null; embarque: number | null; origen: number | null; destino: number | null; po: number | null };
   procesos: PdtProceso[];
   total: PdtProceso;
   filas: (string | number | null)[][];
+  medidas: PdtMedida[];
   registros: number;
+  causas: string[];
 }

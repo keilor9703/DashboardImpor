@@ -88,40 +88,51 @@ export function pipeline(d: DashboardData["pipeline"], t: Tokens): EChartsCoreOp
   };
 }
 
-/** Lead time por etapa: barra = promedio real, marca vertical = meta (bullet chart). */
+/** Lead time por etapa: barra = promedio real, marca vertical = meta (bullet chart).
+ *  Los valores van en una columna fija a la derecha para no chocar con la marca de la meta. */
 export function stagesBullet(d: RutaEtapas, t: Tokens): EChartsCoreOption {
   const et = d.etapas;
+  const over = (e: RutaEtapas["etapas"][number]) => e.real != null && e.meta != null && e.real > e.meta;
+  const fmt = (x: number) => x.toLocaleString("es-CO", { maximumFractionDigits: 1 });
   return {
-    grid: { left: 4, right: 70, top: 8, bottom: 4, containLabel: true },
+    // márgenes fijos: etiquetas a la izquierda (150 px) y columna de valores a la derecha (112 px)
+    grid: { left: 158, right: 112, top: 8, bottom: 4, containLabel: false },
     tooltip: {
       ...tooltipBase(t),
       trigger: "item",
       formatter: (p: { dataIndex: number }) => {
         const e = et[p.dataIndex];
-        const over = e.real != null && e.meta != null && e.real > e.meta;
         return `<div style="font-weight:600;margin-bottom:4px">${e.label}</div>` +
-          row(over ? t.serious : t.muted, "Real promedio", days(e.real)) + row(t.text2, "Meta", days(e.meta)) +
-          `<div style="color:${t.text2};margin-top:4px">${over ? "▲ Sobre la meta" : "✓ Dentro de la meta"} · ${int(e.n)} mediciones</div>`;
+          row(over(e) ? t.serious : t.muted, "Real promedio", days(e.real)) + row(t.text2, "Meta", days(e.meta)) +
+          `<div style="color:${t.text2};margin-top:4px">${over(e) ? "▲ Sobre la meta" : "✓ Dentro de la meta"} · ${int(e.n)} mediciones</div>`;
       },
     },
-    xAxis: { type: "value", show: false, max: (v: { max: number }) => v.max * 1.05 },
-    yAxis: {
-      type: "category", inverse: true, data: et.map((e) => e.label),
-      axisTick: { show: false }, axisLine: { show: false }, axisLabel: { ...axisLabel(t), color: t.text },
-    },
+    xAxis: { type: "value", show: false, max: (v: { max: number }) => v.max * 1.04 },
+    yAxis: [
+      {
+        type: "category", inverse: true, data: et.map((e) => e.label),
+        axisTick: { show: false }, axisLine: { show: false },
+        axisLabel: { ...axisLabel(t), color: t.text, width: 148, overflow: "truncate" },
+      },
+      {
+        type: "category", inverse: true, position: "right", data: et.map((e) => e.key),
+        axisTick: { show: false }, axisLine: { show: false },
+        axisLabel: {
+          fontFamily: t.font, fontSize: 12, margin: 10, align: "left",
+          formatter: (_: string, i: number) => {
+            const e = et[i];
+            if (e.real == null) return "{m|sin dato}";
+            return `{${over(e) ? "b" : "v"}|${fmt(e.real)} d}{m| / ${e.meta != null ? fmt(e.meta) : "—"} d}`;
+          },
+          rich: { v: { color: t.text, fontWeight: 600 }, b: { color: t.serious, fontWeight: 700 }, m: { color: t.text3 } },
+        },
+      },
+    ],
     series: [
       {
         type: "bar", barWidth: 12, z: 2,
-        data: et.map((e) => ({ value: e.real ?? 0, itemStyle: { color: e.real != null && e.meta != null && e.real > e.meta ? t.serious : t.muted } })),
+        data: et.map((e) => ({ value: e.real ?? 0, itemStyle: { color: over(e) ? t.serious : t.muted } })),
         itemStyle: { borderRadius: [0, 4, 4, 0] },
-        label: {
-          show: true, position: "right", fontFamily: t.font, fontSize: 12, distance: 12,
-          formatter: (p: { dataIndex: number }) => {
-            const e = et[p.dataIndex];
-            return e.real == null ? "{m|sin dato}" : `{v|${e.real.toLocaleString("es-CO", { maximumFractionDigits: 1 })} d}  {m|/ ${e.meta} d}`;
-          },
-          rich: { v: { color: t.text, fontWeight: 600 }, m: { color: t.text3 } },
-        },
       },
       {
         type: "scatter", z: 3, silent: true, symbol: "rect", symbolSize: [3, 22],

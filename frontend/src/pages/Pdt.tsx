@@ -1,0 +1,282 @@
+/**
+ * Reporte PDT (lead time de punta a punta) con dos hojas:
+ *  - «In Transit PDT»: la hoja del Excel, filtrable y ordenable.
+ *  - «Indicadores»: indicadores de cumplimiento calculados sobre esa misma hoja.
+ * Los filtros son compartidos por ambas hojas y quedan en la URL.
+ */
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Download, Info, Search } from "lucide-react";
+import { useApi } from "../api/client";
+import type { HojaPdt } from "../api/types";
+import { EChart } from "../charts/EChart";
+import { stagesBullet } from "../charts/options";
+import { complianceByProcess, deviationBuckets, lostDays, monthlyCompliance } from "../charts/pdtOptions";
+import { Card, useSync } from "../components/Layout";
+import { PdtSheet } from "../components/PdtSheet";
+import { int } from "../lib/format";
+import {
+  exportarCsv, filtrar, indicadores, OBJETIVO_CUMPLIMIENTO, opciones, pais, type PdtFiltros,
+} from "../lib/pdt";
+
+const HOJAS = [
+  { id: "in-transit", label: "In Transit PDT" },
+  { id: "indicadores", label: "Indicadores" },
+] as const;
+
+const n1 = (x: number | null | undefined, suf = "") => (x == null ? "—" : `${x.toLocaleString("es-CO", { maximumFractionDigits: 1 })}${suf}`);
+
+function usePdtFiltros() {
+  const [sp, setSp] = useSearchParams();
+  const f: PdtFiltros = {
+    q: sp.get("q") ?? "", status: sp.get("st") ?? "", origen: sp.get("or") ?? "", destino: sp.get("de") ?? "",
+    soloFuera: sp.get("fm") === "1",
+  };
+  const set = (patch: Partial<PdtFiltros>) => setSp((prev) => {
+    const n = new URLSearchParams(prev);
+    const map: Record<keyof PdtFiltros, string> = { q: "q", status: "st", origen: "or", destino: "de", soloFuera: "fm" };
+    Object.entries(patch).forEach(([k, val]) => {
+      const key = map[k as keyof PdtFiltros];
+      const s = typeof val === "boolean" ? (val ? "1" : "") : String(val ?? "");
+      if (s) n.set(key, s); else n.delete(key);
+    });
+    return n;
+  }, { replace: true });
+  const hoja = sp.get("hoja") === "indicadores" ? "indicadores" : "in-transit";
+  const setHoja = (h: string) => setSp((prev) => {
+    const n = new URLSearchParams(prev);
+    if (h === "in-transit") n.delete("hoja"); else n.set("hoja", h);
+    return n;
+  }, { replace: true });
+  const limpiar = () => setSp(hoja === "indicadores" ? new URLSearchParams({ hoja }) : new URLSearchParams(), { replace: true });
+  const activo = !!(f.q || f.status || f.origen || f.destino || f.soloFuera);
+  return { f, set, hoja, setHoja, limpiar, activo };
+}
+
+export function Pdt() {
+  const { version } = useSync();
+  const { data, error } = useApi<HojaPdt>("/api/pdt", { v: version });
+  const { f, set, hoja, setHoja, limpiar, activo } = usePdtFiltros();
+  const [q, setQ] = useState(f.q);
+  useEffect(() => {
+    const id = setTimeout(() => q !== f.q && set({ q }), 250);
+    return () => clearTimeout(id);
+  }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const opts = useMemo(() => (data ? opciones(data) : null), [data]);
+  const filas = useMemo(() => (data ? filtrar(data, f) : []), [data, f.q, f.status, f.origen, f.destino, f.soloFuera]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      <div className="sheet-tabs" role="tablist" aria-label="Hojas del reporte PDT">
+        {HOJAS.map((h) => (
+          <button key={h.id} role="tab" aria-selected={hoja === h.id} className={hoja === h.id ? "on" : ""} onClick={() => setHoja(h.id)}>
+            {h.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="filters" role="search" aria-label="Filtros del reporte PDT">
+        <div className="search field">
+          <span>Buscar</span>
+          <div style={{ position: "relative" }}>
+            <Search size={16} />
+            <input className="input" placeholder="Embarque o PO…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar embarque o PO" />
+          </div>
+        </div>
+        <label className="field"><span>Status</span>
+          <select className="select" value={f.status} onChange={(e) => set({ status: e.target.value })}>
+            <option value="">Todos</option>
+            {opts?.status.map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>Origen</span>
+          <select className="select" value={f.origen} onChange={(e) => set({ origen: e.target.value })}>
+            <option value="">Todos</option>
+            {opts?.origen.map((s) => <option key={s} value={s}>{pais(s)}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>Destino</span>
+          <select className="select" value={f.destino} onChange={(e) => set({ destino: e.target.value })}>
+            <option value="">Todos</option>
+            {opts?.destino.map((s) => <option key={s} value={s}>{pais(s)}</option>)}
+          </select>
+        </label>
+        <label className="check" style={{ alignSelf: "center", marginTop: 16 }}>
+          <input type="checkbox" checked={f.soloFuera} onChange={(e) => set({ soloFuera: e.target.checked })} /> Solo fuera de meta (PDT total)
+        </label>
+        <div className="grow" />
+        <span className="period-note">{data ? `${int(filas.length)} de ${int(data.registros)} registros` : "…"}</span>
+        {activo && <button className="link-btn" onClick={() => { setQ(""); limpiar(); }}>Limpiar</button>}
+        <button className="btn" disabled={!data || !filas.length} onClick={() => data && exportarCsv(data, filas)}>
+          <Download size={14} /> Exportar a Excel
+        </button>
+      </div>
+
+      {error && <div className="card error-box">No fue posible cargar la hoja In Transit PDT: {error}</div>}
+      {!data && !error && <div className="card skeleton" style={{ height: 420 }} />}
+      {data && hoja === "in-transit" && (
+        <Card title="In Transit PDT" subtitle="Hoja del Excel tal cual · haga clic en un proceso para ver su detalle">
+          <PdtSheet hoja={data} filas={filas} />
+        </Card>
+      )}
+      {data && hoja === "indicadores" && <Indicadores hoja={data} filas={filas} />}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function Badge({ v }: { v: number | null }) {
+  if (v == null) return <span className="muted">—</span>;
+  const tone = v >= OBJETIVO_CUMPLIMIENTO ? "good" : v >= 70 ? "serious" : "critical";
+  return <span className={`badge ${tone}`}>{n1(v, " %")}</span>;
+}
+
+function Stat({ label, value, sub, tone }: { label: string; value: string; sub: React.ReactNode; tone?: "bad" | "good" }) {
+  return (
+    <section className="card kpi">
+      <div className="kpi-label">{label}</div>
+      <div className={`kpi-value num ${tone === "bad" ? "text-bad" : tone === "good" ? "text-good" : ""}`}>{value}</div>
+      <div className="kpi-foot">{sub}</div>
+    </section>
+  );
+}
+
+function Indicadores({ hoja, filas }: { hoja: HojaPdt; filas: number[] }) {
+  const ind = useMemo(() => indicadores(hoja, filas), [hoja, filas]);
+  const [ruta, setRuta] = useState("");
+  const rutaSel = ind.etapas.find((e) => e.id === ruta) ?? ind.etapas[0];
+  const t = ind.total;
+  const procesosConTotal = useMemo(() => [
+    ...ind.procesos,
+    { key: "total", titulo: "Total PDT", titulo_es: "Total PDT", color: "", medidos: t.medidos, enMeta: t.enMeta, fuera: t.fuera,
+      sinRegistro: t.registros - t.medidos, cumplimiento: t.cumplimiento, realProm: t.realProm, metaProm: t.metaProm, diasPerdidos: 0, esTotal: true },
+  ], [ind, t]);
+
+  if (!filas.length) return <div className="card empty">Sin registros con los filtros actuales.</div>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="banner">
+        <Info size={16} />
+        <span>Un registro (embarque + PO) <b>cumple</b> cuando su tiempo real es menor o igual a la meta.
+          Objetivo de cumplimiento: <b>{OBJETIVO_CUMPLIMIENTO} %</b>.</span>
+      </div>
+
+      <div className="kpis kpis-5">
+        <Stat label="Cumplimiento PDT total" value={n1(t.cumplimiento, " %")}
+          tone={t.cumplimiento != null && t.cumplimiento < OBJETIVO_CUMPLIMIENTO ? "bad" : "good"}
+          sub={<>{int(t.enMeta)} de {int(t.medidos)} registros en meta · objetivo {OBJETIVO_CUMPLIMIENTO} %</>} />
+        <Stat label="PDT promedio real" value={n1(t.realProm, " d")}
+          tone={t.realProm != null && t.metaProm != null && t.realProm > t.metaProm ? "bad" : undefined}
+          sub={<>meta promedio {n1(t.metaProm, " d")}</>} />
+        <Stat label="Desviación promedio" value={t.desvProm == null ? "—" : `${t.desvProm > 0 ? "+" : ""}${n1(t.desvProm, " d")}`}
+          tone={t.desvProm != null && t.desvProm > 0 ? "bad" : "good"}
+          sub={t.desvProm != null && t.desvProm <= 0 ? "por debajo de la meta, en promedio" : "por encima de la meta, en promedio"} />
+        <Stat label="Proceso más crítico" value={ind.critico?.titulo_es ?? "—"}
+          sub={ind.critico ? <>{n1(ind.critico.cumplimiento, " %")} en meta · {n1(ind.critico.diasPerdidos, " d")} sobre la meta</> : "—"} />
+        <Stat label="En curso ya fuera de meta" value={int(ind.enRiesgo)} tone={ind.enRiesgo ? "bad" : "good"}
+          sub={<>de {int(ind.enCurso)} registros aún en curso</>} />
+      </div>
+
+      <div className="grid">
+        <Card className="span-6" title="Cumplimiento por proceso" subtitle="% de registros dentro de la meta de cada proceso">
+          <EChart ariaLabel="Cumplimiento por proceso" height={300}
+            build={(tk) => complianceByProcess(procesosConTotal, OBJETIVO_CUMPLIMIENTO, tk)} deps={[procesosConTotal]} />
+        </Card>
+        <Card className="span-6" title="Días perdidos por proceso"
+          subtitle={`Días acumulados por encima de la meta · total ${n1(ind.totalPerdidos, " d")}`}>
+          <EChart ariaLabel="Días perdidos por proceso" height={300}
+            build={(tk) => lostDays(ind.procesos, ind.totalPerdidos, tk)} deps={[ind.procesos, ind.totalPerdidos]} />
+        </Card>
+
+        <Card className="span-7" title="Lead time por proceso vs. meta"
+          subtitle="Días promedio reales (barra) frente a la meta de cada proceso (marca)"
+          actions={ind.etapas.length > 0 && (
+            <select className="select" value={rutaSel?.id} onChange={(e) => setRuta(e.target.value)} aria-label="Ruta">
+              {ind.etapas.map((e) => <option key={e.id} value={e.id}>{e.id} ({e.unidades})</option>)}
+            </select>
+          )}>
+          {rutaSel && (
+            <>
+              <div className="pdt-summary">
+                <div><span>PDT real</span><b className={rutaSel.pdt_real != null && rutaSel.pdt_meta != null && rutaSel.pdt_real > rutaSel.pdt_meta ? "bad" : ""}>{n1(rutaSel.pdt_real, " días")}</b></div>
+                <div><span>Meta PDT</span><b>{n1(rutaSel.pdt_meta, " días")}</b></div>
+                <div><span>Registros</span><b>{int(rutaSel.unidades)}</b></div>
+                <div className="legend" style={{ marginLeft: "auto" }}>
+                  <span><i style={{ background: "var(--serious)" }} />Sobre la meta</span>
+                  <span><i style={{ background: "var(--series-muted)" }} />En meta</span>
+                  <span><i style={{ background: "var(--text)", width: 3 }} />Meta</span>
+                </div>
+              </div>
+              <EChart ariaLabel={`Lead time por proceso para ${rutaSel.id}`} height={280}
+                build={(tk) => stagesBullet(rutaSel, tk)} deps={[rutaSel]} />
+            </>
+          )}
+        </Card>
+        <Card className="span-5" title="Distribución de la desviación" subtitle="Días del PDT total por encima de la meta, por registro">
+          <EChart ariaLabel="Distribución de la desviación del PDT total" height={330}
+            build={(tk) => deviationBuckets(ind.distribucion, tk)} deps={[ind.distribucion]} />
+        </Card>
+
+        <Card className="span-8" title="Cumplimiento por ruta" subtitle="PDT total por origen → destino">
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr><th>Ruta</th><th className="r">Registros</th><th className="r">PDT real / meta</th>
+                  <th className="r">Cumplimiento</th><th>Proceso crítico</th></tr>
+              </thead>
+              <tbody>
+                {ind.rutas.map((r) => (
+                  <tr key={r.ruta}>
+                    <td className="strong">{r.ruta}</td>
+                    <td className="r num">{int(r.registros)}</td>
+                    <td className="r num">
+                      <span className={r.realProm != null && r.metaProm != null && r.realProm > r.metaProm ? "text-bad strong" : "strong"}>{n1(r.realProm, " d")}</span>
+                      <span className="muted"> / {n1(r.metaProm, " d")}</span>
+                    </td>
+                    <td className="r"><Badge v={r.cumplimiento} /></td>
+                    <td style={{ whiteSpace: "normal", minWidth: 130 }}>{r.procesoCritico ? <>{r.procesoCritico.titulo} <span className="muted">· +{n1(r.procesoCritico.dias, " d")}</span></> : <span className="muted">—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+        <Card className="span-4" title="Tendencia mensual" subtitle="% de cumplimiento del PDT por mes de ingreso a SAP">
+          {ind.mensual.length
+            ? <EChart ariaLabel="Cumplimiento mensual del PDT" height={260}
+                build={(tk) => monthlyCompliance(ind.mensual, OBJETIVO_CUMPLIMIENTO, tk)} deps={[ind.mensual]} />
+            : <div className="empty">Aún no hay registros ingresados a SAP con estos filtros.</div>}
+        </Card>
+
+        <Card className="span-12" title="Causas de incumplimiento"
+          subtitle="Comentarios de la hoja agrupados por causa · días = desviación positiva del proceso comentado">
+          {ind.causas.length ? (
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr><th>Causa</th><th className="r">Casos</th><th className="r">% casos</th><th className="r">Días sobre meta</th>
+                    <th>Procesos afectados</th><th>Ejemplo de comentario</th></tr>
+                </thead>
+                <tbody>
+                  {ind.causas.map((c) => (
+                    <tr key={c.causa}>
+                      <td className="strong">{c.causa}</td>
+                      <td className="r num">{int(c.casos)}</td>
+                      <td className="r num">{n1(c.participacion, " %")}</td>
+                      <td className="r num">{n1(c.dias, " d")}</td>
+                      <td style={{ whiteSpace: "normal", minWidth: 160 }}>{c.procesos.join(", ")}</td>
+                      <td className="muted" style={{ whiteSpace: "normal", minWidth: 260 }}><span className="clamp" title={c.ejemplo}>{c.ejemplo}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <div className="empty">No hay comentarios registrados para estos filtros.</div>}
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -137,6 +137,11 @@ def test_hoja_pdt_real_tal_cual():
     fila = d["filas"][0]
     assert fila[1] == "ZAV0327764" and fila[36] == 144 and fila[38] == "BE = 115"
     assert d["total"]["columnas"][2]["tipo"] == "texto"
+    assert d["roles"] == {"status": 0, "embarque": 1, "origen": 2, "destino": 3, "po": 4}
+    assert d["procesos"][0]["roles"] == {"real": 5, "meta": 6, "desviacion": 9, "comentario": 10, "fecha_fin": 8}
+    assert d["medidas"][0]["procesos"][0] == [123.29, 90.0, 33.29] and d["medidas"][0]["total"] == [144.0, 115.0]
+    # «BE = 140» en la columna numérica de meta se interpreta como 140
+    assert all(m["total"][1] is not None for m in d["medidas"])
 
 
 def test_login_password():
@@ -163,3 +168,13 @@ def test_auth_users_tolerante_y_diagnostico():
     assert verify_password("x-123", users["gerencia"])
     assert "no tiene(n) un hash válido" in diagnose_users("gerencia:kjdvbfkdjvkfjd")
     assert "1 usuario(s): gerencia" in diagnose_users(f"gerencia:{h}")
+
+
+def test_clasificacion_de_causas():
+    from app.data.pdt import clasificar_causa
+    assert clasificar_causa("Error al ingresar en SAP (transacción MIGO)") == "Error en SAP"
+    assert clasificar_causa("Fin de semana (S y D) y feriado (L y M)") == "Fin de semana o feriado"
+    assert clasificar_causa("Se maneja con la naviera Hapag quien tiene un TT de 6 días") == "Naviera / tiempo de tránsito"
+    assert clasificar_causa("Pendiente ingreso de pesos en sistema del puerto") == "Pesos, BL o documentos"
+    assert clasificar_causa("Demora en liberación") == "Liberación y aprobaciones"
+    assert clasificar_causa("algo distinto") == "Otras causas" and clasificar_causa(None) is None

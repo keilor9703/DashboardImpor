@@ -7,6 +7,7 @@ import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
 import { Shipments } from "./pages/Shipments";
 import { DataSource } from "./pages/DataSource";
+import { Pdt } from "./pages/Pdt";
 import { Login } from "./pages/Login";
 import "./styles/app.css";
 
@@ -19,6 +20,7 @@ function App() {
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="embarques" element={<Shipments />} />
+        <Route path="pdt" element={<Pdt />} />
         <Route path="fuente" element={<DataSource />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
