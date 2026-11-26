@@ -52,9 +52,11 @@ export function Login() {
       <div className="login-form">
         <div className="login-box">
           <div className="login-brands" aria-label={`${PRODUCTO.nombre} para ${CLIENTE.nombre}`}>
-            <img src={PRODUCTO.logo} alt={PRODUCTO.nombre} className="lb-product" />
+            <img src={PRODUCTO.logo} alt={PRODUCTO.nombre} className="lb-product logo-day" />
+            <img src={PRODUCTO.logoOscuro} alt="" aria-hidden="true" className="lb-product logo-night" />
             <span className="lb-sep" aria-hidden="true" />
-            <img src={CLIENTE.logo} alt={CLIENTE.nombre} className="lb-client" />
+            <img src={CLIENTE.logo} alt={CLIENTE.nombre} className="lb-client logo-day" />
+            <img src={CLIENTE.logoOscuro} alt="" aria-hidden="true" className="lb-client logo-night" />
           </div>
           {mode === "demo" && <span className="demo-tag">Modo demostración</span>}
           <h1>Iniciar sesión</h1>

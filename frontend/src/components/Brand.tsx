@@ -9,16 +9,24 @@ export const PRODUCTO = {
   logo: "/brand/siacomex.png",
   logoOscuro: "/brand/siacomex-dark.png", // versión con «COMEX» en blanco para fondos oscuros
 };
-export const CLIENTE = { nombre: "Kimberly-Clark", logo: "/brand/kimberly-clark.png" };
+export const CLIENTE = {
+  nombre: "Kimberly-Clark",
+  logo: "/brand/kimberly-clark.png",
+  logoOscuro: "/brand/kimberly-clark-dark.png", // blanco, para el modo noche
+};
 export const DESARROLLADOR = "Techstack Colombia S.A.S.";
 
 type Size = "sm" | "md" | "lg";
 
 /** Logo dentro de una placa clara: legible sobre fondos oscuros y en modo oscuro. */
-export function LogoPlate({ src, alt, size = "md", className = "" }: { src: string; alt: string; size?: Size; className?: string }) {
+/** Logo dentro de una placa: clara en modo día; si hay versión oscura, placa negra en modo noche. */
+export function LogoPlate({ src, srcDark, alt, size = "md", className = "" }: {
+  src: string; srcDark?: string; alt: string; size?: Size; className?: string;
+}) {
   return (
-    <span className={`logo-plate ${size} ${className}`}>
-      <img src={src} alt={alt} draggable={false} />
+    <span className={`logo-plate ${size} ${srcDark ? "themed" : ""} ${className}`}>
+      <img className="logo-day" src={src} alt={alt} draggable={false} />
+      {srcDark && <img className="logo-night" src={srcDark} alt="" aria-hidden="true" draggable={false} />}
     </span>
   );
 }
@@ -33,7 +41,7 @@ export function ProductLogo({ onDark = false, size = "md", className = "" }: { o
 }
 
 export function ClientLogo(props: { size?: Size; className?: string }) {
-  return <LogoPlate src={CLIENTE.logo} alt={CLIENTE.nombre} {...props} />;
+  return <LogoPlate src={CLIENTE.logo} srcDark={CLIENTE.logoOscuro} alt={CLIENTE.nombre} {...props} />;
 }
 
 export function DevCredit({ className = "" }: { className?: string }) {
