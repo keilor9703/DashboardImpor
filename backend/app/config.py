@@ -34,18 +34,17 @@ class Settings(BaseSettings):
     data_source: Literal["mock", "graph", "file"] = "mock"
     cache_ttl_seconds: int = 120
 
-    # Credenciales de la app "daemon" que lee el Excel (client credentials)
+    # App de Entra ID que lee el Excel (client credentials). Si se usa la misma app del
+    # login, GRAPH_CLIENT_ID puede quedar vacío y se toma AZURE_API_CLIENT_ID.
     graph_client_id: str = ""
     graph_client_secret: str = ""
-    # Ubicación del archivo en SharePoint
-    sharepoint_hostname: str = ""          # ej. empresa.sharepoint.com
-    sharepoint_site_path: str = ""         # ej. /sites/Operaciones
-    sharepoint_file_path: str = ""         # ej. /Consolidados/Operaciones 2026.xlsx
-    excel_table_name: str = ""             # Tabla de Excel (recomendado)
-    excel_sheet_name: str = "Sheet1"       # Si no hay tabla, se usa la hoja
-    # "download": descarga el .xlsx y lo procesa (recomendado: el archivo es grande).
-    # "workbook": API de Excel de Graph (solo si la hoja está limpia o es una Tabla).
-    graph_read_mode: Literal["workbook", "download"] = "download"
+    # URL del archivo en SharePoint (la de «Copiar ruta de acceso» o la del navegador)
+    sharepoint_file_url: str = ""
+    # Configuración anterior por partes (se mantiene por compatibilidad)
+    sharepoint_hostname: str = ""
+    sharepoint_site_path: str = ""
+    sharepoint_file_path: str = ""
+    excel_sheet_name: str = "Sheet1"
 
     local_file_path: str = ""
 

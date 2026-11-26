@@ -25,6 +25,7 @@ export function useApi<T>(path: string, params?: Params) {
   const { getToken, onUnauthorized } = useAuth();
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const key = buildUrl(path, params);
@@ -49,9 +50,11 @@ export function useApi<T>(path: string, params?: Params) {
         }
         setData(await res.json());
         setError(null);
+        setStatus(res.status);
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
         setError((e as Error).message || "No fue posible conectar con el servidor");
+        setStatus(e instanceof ApiError ? e.status : null);
       } finally {
         if (!c.signal.aborted) setLoading(false);
       }
@@ -60,7 +63,7 @@ export function useApi<T>(path: string, params?: Params) {
   }, [key, tick, getToken, onUnauthorized]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
-  return { data, error, loading, reload };
+  return { data, error, status, loading, reload };
 }
 
 export async function apiPost<T>(path: string, getToken: () => Promise<string | null>): Promise<T> {

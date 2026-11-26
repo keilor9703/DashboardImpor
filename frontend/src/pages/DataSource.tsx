@@ -31,6 +31,16 @@ export function DataSource() {
             <tbody>
               <tr><td className="muted">Fuente</td><td className="strong">{TIPO[f.tipo]}</td></tr>
               <tr><td className="muted">Ubicación</td><td style={{ whiteSpace: "normal" }}>{f.detalle}</td></tr>
+              {f.archivo && (
+                <tr>
+                  <td className="muted">Archivo en SharePoint</td>
+                  <td style={{ whiteSpace: "normal" }}>
+                    <b>{f.archivo.nombre}</b> · modificado {horaRelativa(f.archivo.modificado)}
+                    {f.archivo.modificado_por && <> por <b>{f.archivo.modificado_por}</b></>}
+                    {f.archivo.url && <> · <a href={f.archivo.url} target="_blank" rel="noreferrer">Abrir en SharePoint ↗</a></>}
+                  </td>
+                </tr>
+              )}
               <tr><td className="muted">Líneas con datos</td><td className="num">{int(f.filas)} de {int(f.filas_archivo)} filas del archivo</td></tr>
               <tr><td className="muted">Embarques</td><td className="num">{int(f.embarques)}</td></tr>
               <tr><td className="muted">Tiempo de lectura</td><td className="num">{f.segundos_carga.toLocaleString("es-CO")} s</td></tr>

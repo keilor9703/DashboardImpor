@@ -554,3 +554,11 @@ table.data td.ellipsis { max-width: 150px; overflow: hidden; text-overflow: elli
 .scope-note { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; align-self: flex-end; }
 .scope-note b { color: var(--text); }
 @media (max-width: 640px) { .ms-trigger, .ms-panel { min-width: 0; width: 100%; } }
+
+/* ---------- Sin acceso ---------- */
+.denied { min-height: 100%; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+.denied-box { max-width: 460px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; box-shadow: var(--shadow); }
+.denied-box h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.denied-box p { margin: 0; color: var(--text-2); line-height: 1.55; }
+.denied-icon { color: var(--serious); }
+table.data td a { color: var(--accent); }

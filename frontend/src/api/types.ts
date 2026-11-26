@@ -80,6 +80,8 @@ export interface RutaResumen {
 
 export interface FuenteEstado {
   tipo: "mock" | "graph" | "file";
+  /** solo con SharePoint: datos del archivo */
+  archivo?: { nombre: string; modificado: string | null; modificado_por: string | null; url: string; tamano: number };
   detalle: string;
   filas: number;
   filas_archivo: number;

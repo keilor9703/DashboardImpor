@@ -168,25 +168,25 @@ Lo hace el administrador de Microsoft 365 de la empresa en **portal.azure.com �
 
 Si `VITE_AZURE_CLIENT_ID` está vacío, el frontend funciona en **modo demo**.
 
-## Conectar el Excel de SharePoint (Microsoft Graph)
+## Integración con Microsoft 365 (login y Excel en SharePoint)
 
-1. Registrar la app **`ComEx Excel Reader`** con un *secreto de cliente* y el permiso de aplicación **`Sites.Selected`** (requiere consentimiento del administrador).
-2. Darle permiso de **lectura** solo sobre el sitio del archivo:
-   `POST https://graph.microsoft.com/v1.0/sites/{site-id}/permissions` con `{"roles":["read"],"grantedToIdentities":[{"application":{"id":"<client-id>","displayName":"ComEx Excel Reader"}}]}`
-3. Recomendado: convertir la hoja consolidada en una **Tabla de Excel** (Insertar → Tabla) y poner su nombre en `EXCEL_TABLE_NAME`.
-4. Configurar en `backend/.env`: `DATA_SOURCE=graph`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `SHAREPOINT_HOSTNAME`, `SHAREPOINT_SITE_PATH`, `SHAREPOINT_FILE_PATH`.
-5. Ajustar `COLUMN_MAP` en `backend/app/data/schema.py` para que coincida con los encabezados reales del Excel.
+La guía completa para TI de SIACOMEX, con los pasos en Entra ID y SharePoint, la configuración de
+Render y Vercel y la solución de problemas, está en **[`docs/INTEGRACION_MICROSOFT.md`](docs/INTEGRACION_MICROSOFT.md)**.
 
-El Excel actual declara ~1.045.000 filas, pero solo ~1.300 tienen datos (el resto son
-filas vacías con formato). Por eso el modo por defecto es `GRAPH_READ_MODE=download`:
-descarga el `.xlsx` y lo lee fila a fila, deteniéndose al terminar los datos
-(lectura en streaming con openpyxl: menos de 1 s y ~100 MB de RAM, aunque la hoja tenga un millón de filas). **Se recomienda eliminar esas filas
-sobrantes del archivo:** pasaría de 23 MB a menos de 1 MB y la sincronización sería casi instantánea.
-Para probar con una copia local del archivo, use `DATA_SOURCE=file` y `LOCAL_FILE_PATH`.
+En resumen:
+- **Una sola aplicación** en Entra ID para el login de los usuarios y para que el backend lea el Excel.
+- **Usuarios de Kimberly-Clark como invitados (B2B)**; el acceso se controla con el rol `Dashboard.Viewer`.
+- **Excel:** permiso `Sites.Selected` (solo lectura del sitio del archivo). Basta con `SHAREPOINT_FILE_URL`
+  (la URL de «Copiar ruta de acceso»). El backend consulta la versión del archivo y solo lo descarga si cambió.
+- **Diagnóstico:** `python -m app.check_microsoft` revisa la configuración y la conexión paso a paso.
+
+El archivo se lee en streaming y se detiene donde terminan los datos, así que tolera filas vacías con formato
+(menos de 1 s y ~100 MB de RAM, aunque la hoja declare un millón de filas). Para probar con una copia local,
+use `DATA_SOURCE=file` y `LOCAL_FILE_PATH`.
 
 ## Actualización de los datos
 
-- El backend guarda el Excel en caché durante `CACHE_TTL_SECONDS` (120 s por defecto).
+- El backend guarda el Excel en caché durante `CACHE_TTL_SECONDS` (300 s en Render).
   Al vencer, sigue respondiendo con los datos actuales mientras relee el archivo en segundo plano.
 - El frontend se refresca solo cada 2 minutos. El botón ⟳ fuerza la sincronización.
 - Si una lectura falla, se siguen mostrando los últimos datos válidos y se indica el error.
@@ -196,6 +196,6 @@ Para probar con una copia local del archivo, use `DATA_SOURCE=file` y `LOCAL_FIL
 
 1. ✅ Base del proyecto, login Microsoft, dashboard con datos simulados
 2. ✅ Modelo de datos del Excel real, torre de control logística, PDT vs. meta, calidad de datos
-3. ⏳ Conexión a SharePoint vía Graph (código listo; faltan credenciales de la empresa) y validación de KPIs con la gerencia
+3. ⏳ Conexión a SharePoint y login con Microsoft: código listo y probado; falta la configuración de TI (docs/INTEGRACION_MICROSOFT.md)
 4. ⏳ Vistas Aduanas y Reportes, exportación a PDF/Excel e histórico de PDT
 5. ⏳ Webhooks de Graph, histórico de KPIs (PostgreSQL), despliegue en Azure

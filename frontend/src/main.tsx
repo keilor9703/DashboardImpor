@@ -9,6 +9,7 @@ import { Shipments } from "./pages/Shipments";
 import { DataSource } from "./pages/DataSource";
 import { Pdt } from "./pages/Pdt";
 import { Login } from "./pages/Login";
+import { AccessGate } from "./pages/AccessGate";
 import "./styles/app.css";
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
   if (!ready) return <div className="empty" style={{ paddingTop: 120 }}>Verificando sesión…</div>;
   if (!user) return <Login />;
   return (
+    <AccessGate>
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
@@ -25,6 +27,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </AccessGate>
   );
 }
 
