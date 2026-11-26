@@ -22,7 +22,7 @@ export function buildUrl(path: string, params?: Params) {
 
 /** Hook de consulta: incluye el token de Microsoft y cancela peticiones obsoletas. */
 export function useApi<T>(path: string, params?: Params) {
-  const { getToken } = useAuth();
+  const { getToken, onUnauthorized } = useAuth();
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +42,7 @@ export function useApi<T>(path: string, params?: Params) {
           signal: c.signal,
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
+        if (res.status === 401 && onUnauthorized) onUnauthorized();
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new ApiError(res.status, body.detail ?? `Error ${res.status}`);
@@ -56,7 +57,7 @@ export function useApi<T>(path: string, params?: Params) {
       }
     })();
     return () => c.abort();
-  }, [key, tick, getToken]);
+  }, [key, tick, getToken, onUnauthorized]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { data, error, loading, reload };

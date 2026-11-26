@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from ..config import get_settings
+from ..data import pdt
 from ..data.schema import diagnostico, normalize
 from ..data.sources import DataSource, build_source
 
@@ -26,6 +27,8 @@ class Repository:
     def __init__(self, source: DataSource, ttl: int, trm: float = 4000.0, eur_usd: float = 1.08):
         self.source, self.ttl, self.trm, self.eur_usd = source, ttl, trm, eur_usd
         self._calidad: list[dict] = []
+        self._pdt: dict | None = None
+        self._pdt_error: str | None = None
         self._duracion = 0.0
         self._df: pd.DataFrame | None = None
         self._loaded_at = 0.0
@@ -52,6 +55,11 @@ class Repository:
                 started = time.perf_counter()
                 df = normalize(self.source.fetch(), self.trm, self.eur_usd)
                 self._calidad = diagnostico(self.source.raw_rows, df)
+                try:  # la hoja PDT es opcional: si falla, el resto del tablero sigue funcionando
+                    self._pdt, self._pdt_error = pdt.parse(*self.source.fetch_pdt(df)), None
+                except Exception as exc:
+                    self._pdt, self._pdt_error = None, str(exc)
+                    log.warning("No se pudo leer la hoja In Transit PDT: %s", exc)
                 self._duracion = time.perf_counter() - started
                 self._df, self._loaded_at = df, time.time()
                 self._updated = datetime.now(timezone.utc)
@@ -64,6 +72,12 @@ class Repository:
                     raise DataUnavailable(str(exc)) from exc
                 self._loaded_at = time.time()  # reintenta en el siguiente ciclo, no en cada petición
         return self._df
+
+    def hoja_pdt(self) -> dict:
+        self.data()
+        if self._pdt is None:
+            raise DataUnavailable(self._pdt_error or "La hoja In Transit PDT no está disponible")
+        return self._pdt
 
     def calidad(self) -> list[dict]:
         self.data()

@@ -4,6 +4,7 @@ El frontend inicia sesión con MSAL (cuenta corporativa de Microsoft 365) y env�
 el access token en el header ``Authorization: Bearer <token>``. Aquí se valida
 firma (JWKS del tenant), emisor, audiencia, expiración y, opcionalmente, rol.
 """
+import time
 from functools import lru_cache
 
 import jwt
@@ -12,6 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from .config import Settings, get_settings
+from .passwords import parse_users, verify_password
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -48,6 +50,27 @@ def decode_entra_token(token: str, settings: Settings) -> dict:
     )
 
 
+def _secret(settings: Settings) -> str:
+    if len(settings.auth_secret) < 32:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "AUTH_SECRET no configurado (mínimo 32 caracteres)")
+    return settings.auth_secret
+
+
+def login_password(username: str, password: str, settings: Settings) -> dict:
+    users = parse_users(settings.auth_users)
+    stored = users.get(username.strip().lower())
+    if not stored or not verify_password(password, stored):
+        time.sleep(0.5)  # frena intentos de fuerza bruta
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario o contraseña incorrectos")
+    now = int(time.time())
+    name = username.strip()
+    token = jwt.encode(
+        {"sub": name.lower(), "name": name, "iat": now, "exp": now + settings.auth_session_hours * 3600, "iss": "comex-dashboard"},
+        _secret(settings), algorithm="HS256",
+    )
+    return {"access_token": token, "name": name, "expires_in": settings.auth_session_hours * 3600}
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     settings: Settings = Depends(get_settings),
@@ -57,6 +80,16 @@ def get_current_user(
 
     if credentials is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Falta el token de acceso")
+
+    if settings.auth_mode == "password":
+        try:
+            claims = jwt.decode(credentials.credentials, _secret(settings), algorithms=["HS256"], issuer="comex-dashboard")
+        except jwt.PyJWTError as exc:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sesión vencida o inválida") from exc
+        if claims["sub"] not in parse_users(settings.auth_users):  # usuario eliminado
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario sin acceso")
+        return User(oid=claims["sub"], name=claims["name"], roles=["Dashboard.Viewer"])
+
     try:
         claims = decode_entra_token(credentials.credentials, settings)
     except jwt.PyJWTError as exc:

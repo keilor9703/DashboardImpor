@@ -92,11 +92,12 @@ def test_excel_real_coincide_con_hoja_pdt():
     from app.data.sources import read_sheet
     raw, filas = read_sheet(EXCEL_REAL, "Sheet1")
     real = normalize(raw)
-    assert len(real) > 1000 and filas > len(real)
+    assert len(real) > 1000 and filas >= len(real)
     u = real[real["shipment_ref"] == "ZAV0327764"].iloc[0]
     assert round(u["pdt"]) == 144 and u["meta_pdt"] == 115
     assert round(u["d_orden"], 2) == 123.29
-    assert any(h["clave"] == "filas_vacias" for h in diagnostico(filas, real))
+    assert not any(h["clave"] == "filas_vacias" for h in diagnostico(filas, real))  # insumo ya limpio
+    assert any(h["clave"] == "filas_vacias" for h in diagnostico(1_045_846, real))
 
 
 @pytest.mark.skipif(not EXCEL_REAL.exists(), reason="Excel real no disponible")
@@ -113,5 +114,43 @@ def test_fuente_no_disponible_responde_503():
     try:
         r = client.get("/api/dashboard")
         assert r.status_code == 503 and "No fue posible leer el Excel" in r.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_hoja_pdt_demo():
+    d = client.get("/api/pdt").json()
+    assert len(d["procesos"]) == 6 and d["total"]["titulo"] == "Total PDT"
+    assert d["procesos"][0]["columnas"][0]["label"] == "Real Operation to PO Creation"
+    assert all(len(f) == len(d["filas"][0]) for f in d["filas"])
+
+
+@pytest.mark.skipif(not EXCEL_REAL.exists(), reason="Excel real no disponible")
+def test_hoja_pdt_real_tal_cual():
+    from app.data import pdt
+    from app.data.sources import read_rows
+    header, rows, _ = read_rows(EXCEL_REAL, "In Transit PDT", max_empty=20)
+    d = pdt.parse(header, rows)
+    assert d["registros"] == 60 and [p["titulo_es"] for p in d["procesos"]][0] == "Creación de PO"
+    assert [c["label"] for c in d["procesos"][1]["columnas"]] == [
+        "Real Operation to inland", "Inland target", "ATD", "Days Out of Target Total Inland", "Comentarios"]
+    fila = d["filas"][0]
+    assert fila[1] == "ZAV0327764" and fila[36] == 144 and fila[38] == "BE = 115"
+    assert d["total"]["columnas"][2]["tipo"] == "texto"
+
+
+def test_login_password():
+    from app.config import Settings, get_settings
+    from app.passwords import hash_password
+    s = Settings(auth_mode="password", auth_users=f"Gerencia:{hash_password('clave-segura-1')}", auth_secret="x" * 40)
+    app.dependency_overrides[get_settings] = lambda: s
+    try:
+        assert client.get("/api/dashboard").status_code == 401
+        assert client.post("/api/auth/login", json={"username": "gerencia", "password": "mala"}).status_code == 401
+        r = client.post("/api/auth/login", json={"username": "gerencia", "password": "clave-segura-1"})
+        assert r.status_code == 200
+        h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        assert client.get("/api/me", headers=h).json()["name"] == "gerencia"
+        assert client.get("/api/me", headers={"Authorization": "Bearer basura"}).status_code == 401
     finally:
         app.dependency_overrides.clear()

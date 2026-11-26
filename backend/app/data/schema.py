@@ -118,7 +118,7 @@ def _texto(s: pd.Series) -> pd.Series:
 def _fecha_valor(v):
     if v is None or (isinstance(v, float) and np.isnan(v)):
         return pd.NaT
-    if isinstance(v, (datetime, date)):  # datetime y date (calamine / openpyxl)
+    if isinstance(v, (datetime, date)):  # datetime y date (openpyxl)
         return pd.Timestamp(v)
     if isinstance(v, time):  # horas sueltas "00:00" = celda sin fecha
         return pd.NaT

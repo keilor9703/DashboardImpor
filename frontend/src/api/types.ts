@@ -179,3 +179,26 @@ export interface Hallazgo {
 
 /** Filtros globales: fechas + dimensiones dinámicas (modo, origen, destino, franquicia, forwarder). */
 export type Filters = { desde: string; hasta: string } & Record<string, string>;
+
+export interface PdtColumna {
+  idx: number;
+  label: string;
+  tipo: "dias" | "fecha" | "desviacion" | "texto";
+}
+
+export interface PdtProceso {
+  key: string;
+  titulo: string;
+  titulo_es: string;
+  color: string;
+  columnas: PdtColumna[];
+  resumen: { real_promedio: number | null; meta_promedio: number | null; fuera_meta: number; en_meta: number; sin_registro: number };
+}
+
+export interface HojaPdt {
+  identidad: PdtColumna[];
+  procesos: PdtProceso[];
+  total: PdtProceso;
+  filas: (string | number | null)[][];
+  registros: number;
+}

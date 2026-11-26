@@ -17,12 +17,14 @@ export function Login() {
   const { login, mode } = useAuth();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
   const go = async () => {
     setBusy(true);
     setErr(null);
     try {
-      await login();
+      await login(username, password);
     } catch (e) {
       setErr((e as Error).message);
       setBusy(false);
@@ -48,17 +50,33 @@ export function Login() {
         <div className="login-box">
           {mode === "demo" && <span className="demo-tag">Modo demostración</span>}
           <h1>Iniciar sesión</h1>
+          {mode === "password" ? (
+            <form className="login-fields" onSubmit={(e) => { e.preventDefault(); void go(); }}>
+              <p>Ingrese con el usuario asignado por el administrador.</p>
+              <label className="field"><span>Usuario</span>
+                <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
+              </label>
+              <label className="field"><span>Contraseña</span>
+                <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              </label>
+              <button className="btn primary login-submit" type="submit" disabled={busy}>{busy ? "Ingresando…" : "Ingresar"}</button>
+              {err && <p className="error-box" style={{ padding: "4px 0", textAlign: "left" }}>{err}</p>}
+            </form>
+          ) : (<>
           <p>Ingrese con su cuenta corporativa de Microsoft 365.</p>
           <button className="ms-btn" onClick={go} disabled={busy}>
             <MicrosoftLogo />
             {busy ? "Conectando…" : mode === "demo" ? "Entrar en modo demo" : "Continuar con Microsoft"}
           </button>
           {err && <p className="error-box" style={{ padding: "12px 0" }}>{err}</p>}
+          </>)}
           <div className="login-note">
             <Lock size={14} style={{ flex: "none", marginTop: 2 }} />
             <span>
               {mode === "demo"
                 ? "Microsoft Entra ID aún no está configurado. Defina VITE_AZURE_CLIENT_ID para activar el inicio de sesión corporativo."
+                : mode === "password"
+                ? "Acceso restringido. La sesión se cierra automáticamente después de 12 horas."
                 : "El acceso está restringido a usuarios autorizados de la organización. No almacenamos su contraseña."}
             </span>
           </div>

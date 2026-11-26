@@ -43,6 +43,8 @@ export function Layout() {
     setRefreshing(true);
     try {
       await apiPost("/api/datos/refrescar", getToken);
+    } catch {
+      /* si la sesión venció, la siguiente consulta devuelve 401 y lleva al login */
     } finally {
       setRefreshing(false);
       setVersion((v) => v + 1);
@@ -106,7 +108,7 @@ export function Layout() {
             <div className="user-chip">
               <div className="who">
                 <b>{user?.name}</b>
-                <span>{mode === "demo" ? "Modo demo" : user?.email}</span>
+                <span>{mode === "demo" ? "Modo demo" : mode === "password" ? "Acceso autorizado" : user?.email}</span>
               </div>
               <div className="avatar">{initials}</div>
             </div>

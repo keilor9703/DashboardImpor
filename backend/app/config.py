@@ -13,8 +13,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     # ---------- Autenticación (Microsoft Entra ID) ----------
-    # "demo": no valida tokens (solo desarrollo). "entra": valida tokens de Microsoft.
-    auth_mode: Literal["demo", "entra"] = "demo"
+    # "demo": sin validación (solo desarrollo). "entra": cuenta de Microsoft.
+    # "password": usuario y contraseña propios (mientras se configura Entra ID).
+    auth_mode: Literal["demo", "entra", "password"] = "demo"
+    # Modo password: usuarios "usuario:hash;usuario2:hash" (hash con: python -m app.passwords)
+    auth_users: str = ""
+    auth_secret: str = ""          # clave para firmar las sesiones (larga y aleatoria)
+    auth_session_hours: int = 12
     azure_tenant_id: str = ""
     # Client ID de la app registrada para la API (backend)
     azure_api_client_id: str = ""

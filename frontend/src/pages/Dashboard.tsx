@@ -8,6 +8,7 @@ import { carriers, franchises, monthlyByRoute, pipeline, stagesBullet } from "..
 import { Card, useSync } from "../components/Layout";
 import { FilterBar } from "../components/FilterBar";
 import { KpiCard } from "../components/KpiCard";
+import { PdtSheetCard } from "../components/PdtSheetCard";
 import { days, int, pct, usd } from "../lib/format";
 import { useFilters } from "../lib/filters";
 
@@ -51,6 +52,8 @@ export function Dashboard() {
               <EChart ariaLabel="Embarques abiertos por estado" height={200}
                 build={(t) => pipeline(data.pipeline, t)} deps={[data.pipeline]} />
             </Card>
+
+            <PdtSheetCard />
 
             <StagesCard data={data} />
 

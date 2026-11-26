@@ -1,0 +1,38 @@
+# Blueprint de Render para el backend (FastAPI).
+# En Render: New + → Blueprint → seleccionar este repositorio.
+services:
+  - type: web
+    name: comex-dashboard-api
+    runtime: python
+    plan: free            # cambie a "starter" para que no se duerma por inactividad
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'
+    healthCheckPath: /api/health
+    autoDeploy: true      # cada push a la rama vuelve a desplegar (incluye cambios del Excel)
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ENVIRONMENT
+        value: production
+      # --- Login con usuario y contraseña (mientras se configura Microsoft Entra ID) ---
+      - key: AUTH_MODE
+        value: password
+      - key: AUTH_SECRET
+        generateValue: true          # Render genera una clave aleatoria
+      - key: AUTH_USERS
+        sync: false                  # se ingresa en el panel: usuario:hash (python -m app.passwords)
+      # --- Datos: el Excel que está en el repositorio ---
+      - key: DATA_SOURCE
+        value: file
+      - key: LOCAL_FILE_PATH
+        value: ../Insumos/Insumo1.xlsx
+      - key: EXCEL_SHEET_NAME
+        value: Sheet1
+      - key: CACHE_TTL_SECONDS
+        value: "300"
+      - key: TRM_COP_USD
+        value: "4000"
+      # --- URL del frontend en Vercel (para CORS), ej. https://comex-dashboard.vercel.app ---
+      - key: CORS_ORIGINS
+        sync: false

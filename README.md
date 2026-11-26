@@ -48,7 +48,7 @@ backend/            API en Python (FastAPI)
   app/auth.py         Validación de tokens de Microsoft Entra ID
   app/data/schema.py  Mapeo de columnas del Excel, limpieza y campos derivados
   app/data/targets.py Metas de lead time por ruta y etapa
-  app/data/sources.py Fuentes: mock | file (.xlsx local) | graph (SharePoint); lectura rápida con calamine
+  app/data/sources.py Fuentes: mock | file (.xlsx local) | graph (SharePoint); lectura en streaming de bajo consumo
   app/data/mock.py    Generador de datos simulados
   app/services/       Caché (repository) y cálculo de KPIs (analytics)
   app/routers/        Endpoints /api/*
@@ -66,7 +66,7 @@ docker-compose.yml
 Por defecto, `.env.example` usa el Excel de `Insumos/Insumo1.xlsx` (`DATA_SOURCE=file`).
 Si ya tenía un `.env` de la fase 1, agregue `DATA_SOURCE=file` y
 `LOCAL_FILE_PATH=../Insumos/Insumo1.xlsx`, e instale de nuevo las dependencias
-(`pip install -r requirements.txt`, se agregó `python-calamine`).
+(`pip install -r requirements.txt`).
 
 ```bash
 # Backend
@@ -97,6 +97,41 @@ Con Docker: `cp backend/.env.example backend/.env && docker compose up --build` 
 
 Pruebas del backend: `cd backend && pytest`
 
+## Publicación: frontend en Vercel + backend en Render
+
+```
+Navegador ──▶ Vercel (frontend React)  ──HTTPS──▶  Render (FastAPI)  ──lee──▶  Insumos/Insumo1.xlsx (en el repo)
+```
+
+### 1. Backend en Render
+1. En render.com: **New + → Blueprint** y seleccione este repositorio. Render lee `render.yaml`.
+2. Complete las variables marcadas como `sync: false`:
+   - `AUTH_USERS`: usuarios con su contraseña cifrada, `usuario:hash;usuario2:hash`. El hash se genera en su PC con
+     `cd backend` y `python -m app.passwords`.
+   - `CORS_ORIGINS`: la URL del frontend en Vercel, ej. `https://comex-dashboard.vercel.app`.
+3. Al terminar, la API queda en `https://comex-dashboard-api.onrender.com`. Verifíquela en `/api/health`.
+
+El plan **free** se duerme tras 15 minutos sin uso; la primera visita después tarda ~1 minuto.
+Para uso diario de la gerencia se recomienda el plan **Starter** (siempre activo).
+
+### 2. Frontend en Vercel
+1. En vercel.com: **Add New → Project**, importe el repositorio y en **Root Directory** elija `frontend`.
+2. Variables de entorno:
+   - `VITE_API_BASE_URL` = URL del backend en Render (sin `/` al final)
+   - `VITE_AUTH_MODE` = `password`
+3. Deploy. Copie la URL final en `CORS_ORIGINS` de Render.
+
+### 3. Actualizar los datos
+Reemplace `Insumos/Insumo1.xlsx` en el repositorio (mismo nombre) y haga push: Render vuelve a desplegar
+solo. Cuando se configure SharePoint, cambie `DATA_SOURCE=graph` y el tablero leerá el Excel en vivo.
+
+### Seguridad
+- El backend **no arranca** en producción con `AUTH_MODE=demo`.
+- Las contraseñas se guardan cifradas (PBKDF2); las sesiones duran 12 horas (`AUTH_SESSION_HOURS`).
+- El Excel contiene datos reales de la empresa: **mantenga el repositorio privado**.
+- Cuando la empresa configure Microsoft Entra ID, cambie a `AUTH_MODE=entra` (backend) y
+  `VITE_AUTH_MODE=entra` + variables `VITE_AZURE_*` (frontend).
+
 ## Endpoints
 
 | Método | Ruta | Descripción |
@@ -109,6 +144,8 @@ Pruebas del backend: `cd backend && pytest`
 | GET | `/api/embarques/{id}` | Detalle: hitos, etapas vs. meta, contenedores y líneas |
 | GET | `/api/datos/estado` | Estado de la fuente de datos y de la última sincronización |
 | GET | `/api/datos/calidad` | Hallazgos de calidad de datos del Excel |
+| GET | `/api/pdt` | Hoja «In Transit PDT» tal cual: 6 procesos + total con sus columnas |
+| POST | `/api/auth/login` | Login con usuario y contraseña (`AUTH_MODE=password`) |
 | POST | `/api/datos/refrescar` | Fuerza la relectura del Excel |
 
 ## Configurar Microsoft Entra ID (login)
@@ -139,8 +176,8 @@ Si `VITE_AZURE_CLIENT_ID` está vacío, el frontend funciona en **modo demo**.
 
 El Excel actual declara ~1.045.000 filas, pero solo ~1.300 tienen datos (el resto son
 filas vacías con formato). Por eso el modo por defecto es `GRAPH_READ_MODE=download`:
-descarga el `.xlsx` y lo lee con calamine, que se detiene al terminar los datos
-(unos 7 s, frente a unos 50 s con pandas). **Se recomienda eliminar esas filas
+descarga el `.xlsx` y lo lee fila a fila, deteniéndose al terminar los datos
+(lectura en streaming con openpyxl: menos de 1 s y ~100 MB de RAM, aunque la hoja tenga un millón de filas). **Se recomienda eliminar esas filas
 sobrantes del archivo:** pasaría de 23 MB a menos de 1 MB y la sincronización sería casi instantánea.
 Para probar con una copia local del archivo, use `DATA_SOURCE=file` y `LOCAL_FILE_PATH`.
 

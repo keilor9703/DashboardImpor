@@ -62,6 +62,12 @@ def detalle(embarque: str, repo: Repository = Depends(get_repository)):
     return out
 
 
+@router.get("/pdt")
+def hoja_pdt(repo: Repository = Depends(get_repository)):
+    """Hoja «In Transit PDT» tal cual: 6 procesos + total, con sus columnas de detalle."""
+    return repo.hoja_pdt()
+
+
 @router.get("/datos/estado")
 def estado_fuente(repo: Repository = Depends(get_repository)):
     repo.data()

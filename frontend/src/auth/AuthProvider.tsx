@@ -14,7 +14,7 @@ import {
 } from "@azure/msal-browser";
 import { MsalProvider, useIsAuthenticated, useMsal } from "@azure/msal-react";
 
-export type AuthMode = "entra" | "demo";
+export type AuthMode = "entra" | "password" | "demo";
 export interface AuthUser {
   name: string;
   email?: string;
@@ -23,16 +23,19 @@ interface AuthContextValue {
   mode: AuthMode;
   ready: boolean;
   user: AuthUser | null;
-  login: () => Promise<void>;
+  login: (username?: string, password?: string) => Promise<void>;
   logout: () => Promise<void>;
   getToken: () => Promise<string | null>;
+  /** Se llama cuando la API responde 401 (sesión vencida). */
+  onUnauthorized?: () => void;
 }
 
 const clientId = import.meta.env.VITE_AZURE_CLIENT_ID as string | undefined;
 const tenantId = import.meta.env.VITE_AZURE_TENANT_ID as string | undefined;
 const apiScope = import.meta.env.VITE_API_SCOPE as string | undefined;
 
-export const authMode: AuthMode = clientId ? "entra" : "demo";
+const envMode = import.meta.env.VITE_AUTH_MODE as AuthMode | undefined;
+export const authMode: AuthMode = envMode ?? (clientId ? "entra" : "demo");
 const scopes = apiScope ? [apiScope] : ["User.Read"];
 
 const msalConfig: Configuration = {
@@ -45,7 +48,7 @@ const msalConfig: Configuration = {
   cache: { cacheLocation: "sessionStorage" },
 };
 
-export const msalInstance = authMode === "entra" ? new PublicClientApplication(msalConfig) : null;
+export const msalInstance = authMode === "entra" && clientId ? new PublicClientApplication(msalConfig) : null;
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -76,6 +79,54 @@ function EntraBridge({ children }: { children: ReactNode }) {
     }),
     [instance, inProgress, isAuthenticated, account, getToken],
   );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+const SESSION_KEY = "comex-session";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+
+interface Session { token: string; name: string; exp: number }
+
+function readSession(): Session | null {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null") as Session | null;
+    return s && s.exp > Date.now() ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Usuario y contraseña propios (backend con AUTH_MODE=password). */
+function PasswordProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<Session | null>(readSession);
+  const logout = useCallback(async () => {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch { /* sin storage */ }
+    setSession(null);
+  }, []);
+  const value = useMemo<AuthContextValue>(() => ({
+    mode: "password",
+    ready: true,
+    user: session ? { name: session.name } : null,
+    login: async (username = "", password = "") => {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.detail ?? "No fue posible iniciar sesión");
+      const s: Session = { token: body.access_token, name: body.name, exp: Date.now() + body.expires_in * 1000 };
+      try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch { /* sin storage */ }
+      setSession(s);
+    },
+    logout,
+    getToken: async () => {
+      const s = readSession();
+      if (!s) { void logout(); return null; }
+      return s.token;
+    },
+    onUnauthorized: logout,
+  }), [session, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
@@ -110,6 +161,7 @@ function DemoProvider({ children }: { children: ReactNode }) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  if (authMode === "password") return <PasswordProvider>{children}</PasswordProvider>;
   if (msalInstance) {
     return (
       <MsalProvider instance={msalInstance}>
