@@ -1,10 +1,12 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import get_settings
 from .routers import dashboard
+from .services.repository import DataUnavailable
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 settings = get_settings()
@@ -23,6 +25,11 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.include_router(dashboard.router)
+
+
+@app.exception_handler(DataUnavailable)
+def data_unavailable(_: Request, exc: DataUnavailable):
+    return JSONResponse(status_code=503, content={"detail": f"No fue posible leer el Excel: {exc}"})
 
 
 @app.get("/api/health", tags=["sistema"])

@@ -6,6 +6,7 @@ Excel; luego ``schema.normalize`` lo convierte al modelo interno.
 - GraphExcelSource: el Excel en SharePoint vía Microsoft Graph (producción).
 """
 import io
+import logging
 import time
 from abc import ABC, abstractmethod
 from urllib.parse import quote
@@ -18,6 +19,7 @@ from ..config import Settings
 from . import mock
 
 GRAPH = "https://graph.microsoft.com/v1.0"
+log = logging.getLogger(__name__)
 
 
 def read_sheet(src, sheet: str, max_empty: int = 500) -> tuple[pd.DataFrame, int]:
@@ -29,7 +31,12 @@ def read_sheet(src, sheet: str, max_empty: int = 500) -> tuple[pd.DataFrame, int
     wb = CalamineWorkbook.from_filelike(src) if hasattr(src, "read") else CalamineWorkbook.from_path(str(src))
     names = wb.sheet_names
     if sheet not in names:
-        raise ValueError(f"No existe la hoja «{sheet}». Hojas disponibles: {names}")
+        # Tolera una configuración vieja: usa la primera hoja cuyo encabezado empiece por "Status"
+        candidata = next((n for n in names if str(next(wb.get_sheet_by_name(n).iter_rows(), [""])[0]).strip().lower() == "status"), None)
+        if candidata is None:
+            raise ValueError(f"No existe la hoja «{sheet}». Hojas disponibles: {names}. Revise EXCEL_SHEET_NAME en el .env")
+        log.warning("La hoja «%s» no existe; se usa «%s». Ajuste EXCEL_SHEET_NAME en el .env", sheet, candidata)
+        sheet = candidata
     sh = wb.get_sheet_by_name(sheet)
     it = sh.iter_rows()
     header = [str(h).strip() for h in next(it)]

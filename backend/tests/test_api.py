@@ -97,3 +97,21 @@ def test_excel_real_coincide_con_hoja_pdt():
     assert round(u["pdt"]) == 144 and u["meta_pdt"] == 115
     assert round(u["d_orden"], 2) == 123.29
     assert any(h["clave"] == "filas_vacias" for h in diagnostico(filas, real))
+
+
+@pytest.mark.skipif(not EXCEL_REAL.exists(), reason="Excel real no disponible")
+def test_hoja_mal_configurada_usa_la_hoja_de_datos():
+    from app.data.sources import read_sheet
+    raw, _ = read_sheet(EXCEL_REAL, "Consolidado")
+    assert "Status" in raw.columns and len(raw) > 1000
+
+
+def test_fuente_no_disponible_responde_503():
+    from app.services.repository import Repository, get_repository
+    from app.data.sources import FileSource
+    app.dependency_overrides[get_repository] = lambda: Repository(FileSource("no-existe.xlsx", "Sheet1"), 60)
+    try:
+        r = client.get("/api/dashboard")
+        assert r.status_code == 503 and "No fue posible leer el Excel" in r.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()

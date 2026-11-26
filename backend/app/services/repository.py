@@ -18,6 +18,10 @@ from ..data.sources import DataSource, build_source
 log = logging.getLogger(__name__)
 
 
+class DataUnavailable(RuntimeError):
+    """No se pudo leer la fuente de datos y no hay datos previos en caché."""
+
+
 class Repository:
     def __init__(self, source: DataSource, ttl: int, trm: float = 4000.0, eur_usd: float = 1.08):
         self.source, self.ttl, self.trm, self.eur_usd = source, ttl, trm, eur_usd
@@ -55,9 +59,9 @@ class Repository:
                 log.info("Datos cargados: %s filas en %.2fs", len(df), time.perf_counter() - started)
             except Exception as exc:  # si falla, se siguen sirviendo los últimos datos buenos
                 self._last_error = str(exc)
-                log.exception("Error cargando datos")
+                log.error("Error cargando datos: %s", exc)
                 if self._df is None:
-                    raise
+                    raise DataUnavailable(str(exc)) from exc
                 self._loaded_at = time.time()  # reintenta en el siguiente ciclo, no en cada petición
         return self._df
 
