@@ -15,8 +15,10 @@ import { complianceByProcess, deviationBuckets, lostDays, monthlyCompliance } fr
 import { Card, useSync } from "../components/Layout";
 import { PdtSheet } from "../components/PdtSheet";
 import { int } from "../lib/format";
+import { MultiSelect } from "../components/MultiSelect";
 import {
-  exportarCsv, filtrar, indicadores, OBJETIVO_CUMPLIMIENTO, opciones, pais, type PdtFiltros,
+  exportarCsv, filtrar, indicadores, OBJETIVO_CUMPLIMIENTO, opciones, pais, STATUS_CERRADO,
+  statusActivos, statusPorDefecto, type PdtFiltros,
 } from "../lib/pdt";
 
 const HOJAS = [
@@ -26,20 +28,26 @@ const HOJAS = [
 
 const n1 = (x: number | null | undefined, suf = "") => (x == null ? "—" : `${x.toLocaleString("es-CO", { maximumFractionDigits: 1 })}${suf}`);
 
+/** Status en la URL: ausente = por defecto (todos excepto cerrados); «-» = ninguno; si no, lista separada por «|». */
 function usePdtFiltros() {
   const [sp, setSp] = useSearchParams();
+  const st = sp.get("st");
   const f: PdtFiltros = {
-    q: sp.get("q") ?? "", status: sp.get("st") ?? "", origen: sp.get("or") ?? "", destino: sp.get("de") ?? "",
+    q: sp.get("q") ?? "", origen: sp.get("or") ?? "", destino: sp.get("de") ?? "",
+    status: st == null ? null : st === "-" ? [] : st.split("|"),
     soloFuera: sp.get("fm") === "1",
   };
-  const set = (patch: Partial<PdtFiltros>) => setSp((prev) => {
+  const set = (patch: Partial<PdtFiltros> & { statusDefecto?: boolean }) => setSp((prev) => {
     const n = new URLSearchParams(prev);
-    const map: Record<keyof PdtFiltros, string> = { q: "q", status: "st", origen: "or", destino: "de", soloFuera: "fm" };
-    Object.entries(patch).forEach(([k, val]) => {
-      const key = map[k as keyof PdtFiltros];
-      const s = typeof val === "boolean" ? (val ? "1" : "") : String(val ?? "");
-      if (s) n.set(key, s); else n.delete(key);
-    });
+    const put = (k: string, val: string) => (val ? n.set(k, val) : n.delete(k));
+    if ("q" in patch) put("q", patch.q ?? "");
+    if ("origen" in patch) put("or", patch.origen ?? "");
+    if ("destino" in patch) put("de", patch.destino ?? "");
+    if ("soloFuera" in patch) put("fm", patch.soloFuera ? "1" : "");
+    if ("status" in patch) {
+      if (patch.status == null || patch.statusDefecto) n.delete("st");
+      else n.set("st", patch.status.length ? patch.status.join("|") : "-");
+    }
     return n;
   }, { replace: true });
   const hoja = sp.get("hoja") === "indicadores" ? "indicadores" : "in-transit";
@@ -49,7 +57,7 @@ function usePdtFiltros() {
     return n;
   }, { replace: true });
   const limpiar = () => setSp(hoja === "indicadores" ? new URLSearchParams({ hoja }) : new URLSearchParams(), { replace: true });
-  const activo = !!(f.q || f.status || f.origen || f.destino || f.soloFuera);
+  const activo = !!(f.q || f.origen || f.destino || f.soloFuera || f.status != null);
   return { f, set, hoja, setHoja, limpiar, activo };
 }
 
@@ -64,7 +72,12 @@ export function Pdt() {
   }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const opts = useMemo(() => (data ? opciones(data) : null), [data]);
-  const filas = useMemo(() => (data ? filtrar(data, f) : []), [data, f.q, f.status, f.origen, f.destino, f.soloFuera]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stKey = f.status?.join("|") ?? "*";
+  // La hoja In Transit aplica el filtro de status; Indicadores no (sus reglas definen qué entra en cada cálculo).
+  const filas = useMemo(() => (data ? filtrar(data, f, hoja === "in-transit") : []),
+    [data, f.q, stKey, f.origen, f.destino, f.soloFuera, hoja]); // eslint-disable-line react-hooks/exhaustive-deps
+  const seleccion = opts ? statusActivos(f, opts.status) : [];
+  const enTransito = opts ? statusPorDefecto(opts.status) : [];
 
   return (
     <>
@@ -84,12 +97,18 @@ export function Pdt() {
             <input className="input" placeholder="Embarque o PO…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar embarque o PO" />
           </div>
         </div>
-        <label className="field"><span>Status</span>
-          <select className="select" value={f.status} onChange={(e) => set({ status: e.target.value })}>
-            <option value="">Todos</option>
-            {opts?.status.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        </label>
+        {hoja === "in-transit" && opts && (
+          <MultiSelect label="Status" opciones={opts.status} seleccion={seleccion}
+            atajos={[
+              { label: "Solo en tránsito", valores: enTransito },
+              { label: "Todos", valores: opts.status },
+              { label: "Solo cerrados", valores: opts.status.filter((x) => x === STATUS_CERRADO) },
+            ]}
+            onChange={(sel) => {
+              const esDefecto = sel.length === enTransito.length && sel.every((x) => enTransito.includes(x));
+              set({ status: sel, statusDefecto: esDefecto });
+            }} />
+        )}
         <label className="field"><span>Origen</span>
           <select className="select" value={f.origen} onChange={(e) => set({ origen: e.target.value })}>
             <option value="">Todos</option>
@@ -102,9 +121,16 @@ export function Pdt() {
             {opts?.destino.map((s) => <option key={s} value={s}>{pais(s)}</option>)}
           </select>
         </label>
-        <label className="check" style={{ alignSelf: "center", marginTop: 16 }}>
-          <input type="checkbox" checked={f.soloFuera} onChange={(e) => set({ soloFuera: e.target.checked })} /> Solo fuera de meta (PDT total)
-        </label>
+        {hoja === "in-transit" ? (
+          <label className="check" style={{ alignSelf: "center", marginTop: 16 }}
+            title="Cerrados: PDT total sobre la meta. En tránsito: alguna etapa completada sobre su meta.">
+            <input type="checkbox" checked={f.soloFuera} onChange={(e) => set({ soloFuera: e.target.checked })} /> Solo fuera de meta
+          </label>
+        ) : (
+          <div className="scope-note"><Info size={14} />
+            <span>PDT total: solo <b>{STATUS_CERRADO}</b> · etapas: cerrados y en tránsito</span>
+          </div>
+        )}
         <div className="grow" />
         <span className="period-note">{data ? `${int(filas.length)} de ${int(data.registros)} registros` : "…"}</span>
         {activo && <button className="link-btn" onClick={() => { setQ(""); limpiar(); }}>Limpiar</button>}
@@ -160,39 +186,40 @@ function Indicadores({ hoja, filas }: { hoja: HojaPdt; filas: number[] }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div className="banner">
         <Info size={16} />
-        <span>Un registro (embarque + PO) <b>cumple</b> cuando su tiempo real es menor o igual a la meta.
-          Objetivo de cumplimiento: <b>{OBJETIVO_CUMPLIMIENTO} %</b>.</span>
+        <span>Un registro (embarque + PO) <b>cumple</b> cuando su tiempo real es menor o igual a la meta · objetivo <b>{OBJETIVO_CUMPLIMIENTO} %</b>.
+          El <b>PDT total</b> se evalúa solo con embarques cerrados ({int(ind.cerrados)}); las <b>etapas</b>, con los cerrados y las etapas
+          ya completadas de los {int(ind.enTransito)} en tránsito.</span>
       </div>
 
       <div className="kpis kpis-5">
         <Stat label="Cumplimiento PDT total" value={n1(t.cumplimiento, " %")}
           tone={t.cumplimiento != null && t.cumplimiento < OBJETIVO_CUMPLIMIENTO ? "bad" : "good"}
-          sub={<>{int(t.enMeta)} de {int(t.medidos)} registros en meta · objetivo {OBJETIVO_CUMPLIMIENTO} %</>} />
+          sub={<>{int(t.enMeta)} de {int(t.medidos)} cerrados en meta · objetivo {OBJETIVO_CUMPLIMIENTO} %</>} />
         <Stat label="PDT promedio real" value={n1(t.realProm, " d")}
           tone={t.realProm != null && t.metaProm != null && t.realProm > t.metaProm ? "bad" : undefined}
           sub={<>meta promedio {n1(t.metaProm, " d")}</>} />
         <Stat label="Desviación promedio" value={t.desvProm == null ? "—" : `${t.desvProm > 0 ? "+" : ""}${n1(t.desvProm, " d")}`}
           tone={t.desvProm != null && t.desvProm > 0 ? "bad" : "good"}
           sub={t.desvProm != null && t.desvProm <= 0 ? "por debajo de la meta, en promedio" : "por encima de la meta, en promedio"} />
-        <Stat label="Proceso más crítico" value={ind.critico?.titulo_es ?? "—"}
+        <Stat label="Etapa más crítica" value={ind.critico?.titulo_es ?? "—"}
           sub={ind.critico ? <>{n1(ind.critico.cumplimiento, " %")} en meta · {n1(ind.critico.diasPerdidos, " d")} sobre la meta</> : "—"} />
-        <Stat label="En curso ya fuera de meta" value={int(ind.enRiesgo)} tone={ind.enRiesgo ? "bad" : "good"}
-          sub={<>de {int(ind.enCurso)} registros aún en curso</>} />
+        <Stat label="En tránsito con etapas fuera de meta" value={int(ind.transitoConAtraso)} tone={ind.transitoConAtraso ? "bad" : "good"}
+          sub={<>de {int(ind.enTransito)} registros en tránsito</>} />
       </div>
 
       <div className="grid">
-        <Card className="span-6" title="Cumplimiento por proceso" subtitle="% de registros dentro de la meta de cada proceso">
+        <Card className="span-6" title="Cumplimiento por etapa" subtitle="% de etapas completadas dentro de la meta · Total PDT: solo cerrados">
           <EChart ariaLabel="Cumplimiento por proceso" height={300}
             build={(tk) => complianceByProcess(procesosConTotal, OBJETIVO_CUMPLIMIENTO, tk)} deps={[procesosConTotal]} />
         </Card>
-        <Card className="span-6" title="Días perdidos por proceso"
+        <Card className="span-6" title="Días perdidos por etapa"
           subtitle={`Días acumulados por encima de la meta · total ${n1(ind.totalPerdidos, " d")}`}>
           <EChart ariaLabel="Días perdidos por proceso" height={300}
             build={(tk) => lostDays(ind.procesos, ind.totalPerdidos, tk)} deps={[ind.procesos, ind.totalPerdidos]} />
         </Card>
 
-        <Card className="span-7" title="Lead time por proceso vs. meta"
-          subtitle="Días promedio reales (barra) frente a la meta de cada proceso (marca)"
+        <Card className="span-7" title="Lead time por etapa vs. meta"
+          subtitle="Días promedio de las etapas completadas (barra) frente a la meta (marca) · PDT total: cerrados"
           actions={ind.etapas.length > 0 && (
             <select className="select" value={rutaSel?.id} onChange={(e) => setRuta(e.target.value)} aria-label="Ruta">
               {ind.etapas.map((e) => <option key={e.id} value={e.id}>{e.id} ({e.unidades})</option>)}
@@ -215,23 +242,24 @@ function Indicadores({ hoja, filas }: { hoja: HojaPdt; filas: number[] }) {
             </>
           )}
         </Card>
-        <Card className="span-5" title="Distribución de la desviación" subtitle="Días del PDT total por encima de la meta, por registro">
+        <Card className="span-5" title="Distribución de la desviación" subtitle="Días del PDT total por encima de la meta · embarques cerrados">
           <EChart ariaLabel="Distribución de la desviación del PDT total" height={330}
             build={(tk) => deviationBuckets(ind.distribucion, tk)} deps={[ind.distribucion]} />
         </Card>
 
-        <Card className="span-8" title="Cumplimiento por ruta" subtitle="PDT total por origen → destino">
+        <Card className="span-8" title="Cumplimiento por ruta" subtitle="PDT total de los embarques cerrados · etapa crítica con cerrados y en tránsito">
           <div className="table-wrap">
             <table className="data">
               <thead>
-                <tr><th>Ruta</th><th className="r">Registros</th><th className="r">PDT real / meta</th>
-                  <th className="r">Cumplimiento</th><th>Proceso crítico</th></tr>
+                <tr><th>Ruta</th><th className="r">Cerrados</th><th className="r">En tránsito</th><th className="r">PDT real / meta</th>
+                  <th className="r">Cumplimiento</th><th>Etapa crítica</th></tr>
               </thead>
               <tbody>
                 {ind.rutas.map((r) => (
                   <tr key={r.ruta}>
                     <td className="strong">{r.ruta}</td>
-                    <td className="r num">{int(r.registros)}</td>
+                    <td className="r num">{int(r.cerrados)}</td>
+                    <td className="r num">{int(r.enTransito)}</td>
                     <td className="r num">
                       <span className={r.realProm != null && r.metaProm != null && r.realProm > r.metaProm ? "text-bad strong" : "strong"}>{n1(r.realProm, " d")}</span>
                       <span className="muted"> / {n1(r.metaProm, " d")}</span>
