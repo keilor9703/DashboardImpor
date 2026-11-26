@@ -44,7 +44,7 @@ export function Login() {
           <div><b>Alertas</b><span>operativas</span></div>
         </div>
         <div className="login-client">
-          <span>Plataforma de</span>
+          <span>Cliente:</span>
           <ClientLogo size="md" />
         </div>
         <div className="login-foot">{PRODUCTO.nombre} · {PRODUCTO.app} · <DevCredit /></div>
