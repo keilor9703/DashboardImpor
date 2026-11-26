@@ -25,28 +25,6 @@ TITULOS_ES = {
 }
 
 
-# Clasificación de los comentarios en causas de incumplimiento (primera regla que coincide).
-# Para ajustar una categoría basta con editar sus palabras clave.
-CAUSAS = [
-    ("Error en SAP", ["migo", "error al ingresar", "no se logra grabar", "quedan en hold"]),
-    ("Pesos, BL o documentos", ["peso", " bl", "bl ", "documento", "factura", "cpi", "dai", "inspecc", "declaraci"]),
-    ("Naviera / tiempo de tránsito", ["naviera", " tt", "cma", "cosco", "hapag", "msc", "maersk", "reserva", "roleo", "motonave", "zarpe", "etd",
-                                      "itinerario", "aerol", "vuelo", "eta "]),
-    ("Liberación y aprobaciones", ["liberaci", "aprobaci", "calidad", "firma", "autoriza"]),
-    ("Capacidad y disponibilidad", ["capacidad", "recepci", "prioriz", "simult", "volumen", "volúmen",
-                                    "disponibilidad", "transportist", "consolidar", "no se alcanz"]),
-    ("Fin de semana o feriado", ["fin de semana", "feriado", "festivo", "sábado", "domingo"]),
-]
-OTRAS = "Otras causas"
-
-
-def clasificar_causa(texto) -> str | None:
-    if not texto or not isinstance(texto, str):
-        return None
-    t = f" {texto.lower()} "
-    return next((nombre for nombre, claves in CAUSAS if any(k in t for k in claves)), OTRAS)
-
-
 def _norm(h) -> str:
     return " ".join(str(h or "").split())
 
@@ -172,12 +150,9 @@ def parse(header: list, rows: list) -> dict:
         medidas.append({
             "procesos": [[n(f, p["roles"]["real"]), n(f, p["roles"]["meta"]), n(f, p["roles"]["desviacion"])] for p in procesos],
             "total": [t, m],
-            "causas": [clasificar_causa(f[p["roles"]["comentario"]]) if p["roles"]["comentario"] is not None else None
-                       for p in procesos],
         })
     return {"identidad": identidad, "roles": roles, "procesos": procesos, "total": total,
-            "filas": filas, "medidas": medidas, "registros": len(filas),
-            "causas": [c for c, _ in CAUSAS] + [OTRAS]}
+            "filas": filas, "medidas": medidas, "registros": len(filas)}
 
 
 def desde_modelo(df: pd.DataFrame) -> tuple[list, list]:

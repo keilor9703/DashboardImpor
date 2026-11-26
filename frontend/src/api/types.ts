@@ -208,8 +208,6 @@ export interface PdtMedida {
   /** por proceso: [real, meta, desviación] ya convertidos a número */
   procesos: [number | null, number | null, number | null][];
   total: [number | null, number | null];
-  /** causa clasificada del comentario de cada proceso */
-  causas: (string | null)[];
 }
 
 export interface HojaPdt {
@@ -220,5 +218,4 @@ export interface HojaPdt {
   filas: (string | number | null)[][];
   medidas: PdtMedida[];
   registros: number;
-  causas: string[];
 }

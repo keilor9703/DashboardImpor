@@ -129,26 +129,6 @@ export function indicadores(h: HojaPdt, filas: number[]) {
     };
   }).sort((a, b) => b.unidades - a.unidades);
 
-  // --- Causas de incumplimiento (comentarios clasificados) ---
-  const causas = new Map<string, { casos: number; dias: number; procesos: Set<string>; ejemplo: string }>();
-  filas.forEach((i) => {
-    h.procesos.forEach((p, k) => {
-      const c = h.medidas[i].causas[k];
-      if (!c) return;
-      const d = h.medidas[i].procesos[k][2];
-      const e = causas.get(c) ?? { casos: 0, dias: 0, procesos: new Set<string>(), ejemplo: "" };
-      e.casos += 1;
-      e.dias += Math.max(d ?? 0, 0);
-      e.procesos.add(p.titulo_es);
-      if (!e.ejemplo) e.ejemplo = String(v(h, i, p.roles.comentario) ?? "");
-      causas.set(c, e);
-    });
-  });
-  const totalCasos = [...causas.values()].reduce((a, c) => a + c.casos, 0);
-  const listaCausas = [...causas.entries()]
-    .map(([causa, c]) => ({ causa, casos: c.casos, dias: c.dias, participacion: pct(c.casos, totalCasos), procesos: [...c.procesos], ejemplo: c.ejemplo }))
-    .sort((a, b) => b.casos - a.casos || b.dias - a.dias);
-
   // --- Distribución de la desviación total ---
   const tramos = [
     { label: "En meta o antes", min: -Infinity, max: 0, tono: "good" },
@@ -181,7 +161,7 @@ export function indicadores(h: HojaPdt, filas: number[]) {
   return {
     total, procesos, critico, totalPerdidos,
     enCurso: abiertos.length, enRiesgo,
-    rutas, etapas, causas: listaCausas, distribucion, mensual,
+    rutas, etapas, distribucion, mensual,
   };
 }
 

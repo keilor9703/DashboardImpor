@@ -251,31 +251,6 @@ function Indicadores({ hoja, filas }: { hoja: HojaPdt; filas: number[] }) {
             : <div className="empty">Aún no hay registros ingresados a SAP con estos filtros.</div>}
         </Card>
 
-        <Card className="span-12" title="Causas de incumplimiento"
-          subtitle="Comentarios de la hoja agrupados por causa · días = desviación positiva del proceso comentado">
-          {ind.causas.length ? (
-            <div className="table-wrap">
-              <table className="data">
-                <thead>
-                  <tr><th>Causa</th><th className="r">Casos</th><th className="r">% casos</th><th className="r">Días sobre meta</th>
-                    <th>Procesos afectados</th><th>Ejemplo de comentario</th></tr>
-                </thead>
-                <tbody>
-                  {ind.causas.map((c) => (
-                    <tr key={c.causa}>
-                      <td className="strong">{c.causa}</td>
-                      <td className="r num">{int(c.casos)}</td>
-                      <td className="r num">{n1(c.participacion, " %")}</td>
-                      <td className="r num">{n1(c.dias, " d")}</td>
-                      <td style={{ whiteSpace: "normal", minWidth: 160 }}>{c.procesos.join(", ")}</td>
-                      <td className="muted" style={{ whiteSpace: "normal", minWidth: 260 }}><span className="clamp" title={c.ejemplo}>{c.ejemplo}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : <div className="empty">No hay comentarios registrados para estos filtros.</div>}
-        </Card>
       </div>
     </div>
   );

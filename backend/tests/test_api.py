@@ -169,12 +169,3 @@ def test_auth_users_tolerante_y_diagnostico():
     assert "no tiene(n) un hash válido" in diagnose_users("gerencia:kjdvbfkdjvkfjd")
     assert "1 usuario(s): gerencia" in diagnose_users(f"gerencia:{h}")
 
-
-def test_clasificacion_de_causas():
-    from app.data.pdt import clasificar_causa
-    assert clasificar_causa("Error al ingresar en SAP (transacción MIGO)") == "Error en SAP"
-    assert clasificar_causa("Fin de semana (S y D) y feriado (L y M)") == "Fin de semana o feriado"
-    assert clasificar_causa("Se maneja con la naviera Hapag quien tiene un TT de 6 días") == "Naviera / tiempo de tránsito"
-    assert clasificar_causa("Pendiente ingreso de pesos en sistema del puerto") == "Pesos, BL o documentos"
-    assert clasificar_causa("Demora en liberación") == "Liberación y aprobaciones"
-    assert clasificar_causa("algo distinto") == "Otras causas" and clasificar_causa(None) is None
