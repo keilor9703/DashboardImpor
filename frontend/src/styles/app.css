@@ -496,17 +496,17 @@ table.data td.ellipsis { max-width: 150px; overflow: hidden; text-overflow: elli
   .login-brands .lb-client { height: 14px; }
 }
 
-/* ---------- Logos en modo noche: versión blanca sobre placa negra ---------- */
+/* ---------- Logos en modo noche: versión blanca, sin fondo ---------- */
 .logo-night { display: none !important; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .logo-day { display: none !important; }
   :root:not([data-theme="light"]) .logo-night { display: block !important; }
-  :root:not([data-theme="light"]) .logo-plate.themed { background: #000000; border: 1px solid rgba(255,255,255,.14); box-shadow: none; }
-  :root:not([data-theme="light"]) .login-brands { background: #000000; border-color: rgba(255,255,255,.14); }
+  :root:not([data-theme="light"]) .logo-plate.themed { background: transparent; border: 0; box-shadow: none; }
+  :root:not([data-theme="light"]) .login-brands { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; }
   :root:not([data-theme="light"]) .lb-sep { background: rgba(255,255,255,.18); }
 }
 :root[data-theme="dark"] .logo-day { display: none !important; }
 :root[data-theme="dark"] .logo-night { display: block !important; }
-:root[data-theme="dark"] .logo-plate.themed { background: #000000; border: 1px solid rgba(255,255,255,.14); box-shadow: none; }
-:root[data-theme="dark"] .login-brands { background: #000000; border-color: rgba(255,255,255,.14); }
+:root[data-theme="dark"] .logo-plate.themed { background: transparent; border: 0; box-shadow: none; }
+:root[data-theme="dark"] .login-brands { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; }
 :root[data-theme="dark"] .lb-sep { background: rgba(255,255,255,.18); }
