@@ -443,3 +443,55 @@ table.data td.ellipsis { max-width: 150px; overflow: hidden; text-overflow: elli
 .login-fields .input { width: 100%; height: 42px; }
 .login-fields p { margin: 0 0 4px; }
 .login-submit { height: 44px; justify-content: center; font-size: 14.5px; }
+
+/* ---------- Marca: SIACOMEX (producto) · cliente · desarrollador ---------- */
+.logo-plate {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  background: #ffffff; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.12);
+}
+.logo-plate img { display: block; width: auto; user-select: none; }
+.logo-plate.sm { padding: 5px 9px; border-radius: 7px; }
+.logo-plate.sm img { height: 16px; }
+.logo-plate.md { padding: 8px 12px; }
+.logo-plate.md img { height: 24px; }
+.logo-plate.lg { padding: 10px 14px; }
+.logo-plate.lg img { height: 30px; }
+:root:not([data-theme="dark"]) .topbar .logo-plate { box-shadow: none; border: 1px solid var(--border); }
+
+.brand { flex-direction: column; align-items: stretch; gap: 8px; padding: 2px 4px 18px; }
+.product-logo { display: block; height: auto; user-select: none; }
+.brand .product-logo { width: 100%; max-width: 200px; margin: 4px auto 0; }
+.brand-sub { font-size: 12px; color: var(--brand-muted); text-align: center; letter-spacing: .02em; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.08); }
+.sidebar-client { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.08); }
+.sidebar-client > span { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.sidebar-client .logo-plate.sm img { height: 14px; }
+.dev-credit { display: block; margin-top: 10px; font-size: 11px; line-height: 1.35; color: var(--brand-muted); opacity: .85; }
+.dev-credit b { font-weight: 600; }
+.topbar-client { display: flex; align-items: center; }
+
+.login-art > .product-logo { align-self: flex-start; width: 260px; max-width: 70%; }
+.login-art h2 { margin-top: auto; }
+.login-client { display: flex; align-items: center; gap: 12px; margin-top: 28px; font-size: 12px; color: #a9bdd4; text-transform: uppercase; letter-spacing: .08em; }
+.login-foot { margin-top: 22px; font-size: 12px; color: #7f97b3; }
+.login-foot .dev-credit { display: inline; margin: 0; color: inherit; opacity: 1; }
+.login-foot .dev-credit b { color: #c9d6e6; }
+.login-brands { display: none; align-items: center; gap: 14px; margin-bottom: 28px; padding: 12px 14px; background: #fff; border-radius: 12px; border: 1px solid var(--border); }
+.login-brands img { display: block; width: auto; min-width: 0; }
+.login-brands .lb-product { height: 26px; }
+.login-brands .lb-client { height: 18px; }
+.lb-sep { width: 1px; align-self: stretch; background: #dfe3ea; }
+
+/* El logo del cliente va en la barra superior; si no cabe, pasa a la barra lateral */
+.sidebar-client { display: none; }
+.login-credit-mobile { display: none; }
+@media (max-width: 1180px) { .topbar-client { display: none; } .sidebar-client { display: flex; } }
+@media (max-width: 900px) {
+  .login-brands { display: flex; }
+  .login-credit-mobile { display: block; margin-top: 28px; color: var(--text-3); }
+  .login-credit-mobile b { color: var(--text-2); }
+  .login-box .login-note { margin-bottom: 8px; }
+}
+@media (max-width: 400px) {
+  .login-brands .lb-product { height: 20px; }
+  .login-brands .lb-client { height: 14px; }
+}

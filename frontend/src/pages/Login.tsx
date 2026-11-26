@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Lock, Ship } from "lucide-react";
+import { Lock } from "lucide-react";
+import { CLIENTE, ClientLogo, DevCredit, PRODUCTO, ProductLogo } from "../components/Brand";
 import { useAuth } from "../auth/AuthProvider";
 
 function MicrosoftLogo() {
@@ -34,20 +35,27 @@ export function Login() {
   return (
     <div className="login">
       <div className="login-art">
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div className="brand-logo"><Ship size={20} /></div>
-          <b style={{ fontSize: 15 }}>ComEx Analytics</b>
-        </div>
-        <h2>Su operación de comercio exterior, en un solo tablero.</h2>
-        <p>Indicadores de importación y exportación, tiempos de nacionalización, tributos y alertas operativas, conectados a su información en SharePoint.</p>
+        <ProductLogo onDark size="lg" />
+        <h2>Su operación logística de comercio exterior, en un solo tablero.</h2>
+        <p>Seguimiento de embarques, lead time por proceso frente a la meta, nacionalización y alertas operativas, conectados a su información en SharePoint.</p>
         <div className="login-stats">
-          <div><b>KPIs</b><span>en tiempo real</span></div>
-          <div><b>SLA</b><span>por aduana</span></div>
+          <div><b>PDT</b><span>por proceso vs. meta</span></div>
+          <div><b>Embarques</b><span>de punta a punta</span></div>
           <div><b>Alertas</b><span>operativas</span></div>
         </div>
+        <div className="login-client">
+          <span>Plataforma de</span>
+          <ClientLogo size="md" />
+        </div>
+        <div className="login-foot">{PRODUCTO.nombre} · {PRODUCTO.app} · <DevCredit /></div>
       </div>
       <div className="login-form">
         <div className="login-box">
+          <div className="login-brands" aria-label={`${PRODUCTO.nombre} para ${CLIENTE.nombre}`}>
+            <img src={PRODUCTO.logo} alt={PRODUCTO.nombre} className="lb-product" />
+            <span className="lb-sep" aria-hidden="true" />
+            <img src={CLIENTE.logo} alt={CLIENTE.nombre} className="lb-client" />
+          </div>
           {mode === "demo" && <span className="demo-tag">Modo demostración</span>}
           <h1>Iniciar sesión</h1>
           {mode === "password" ? (
@@ -80,6 +88,7 @@ export function Login() {
                 : "El acceso está restringido a usuarios autorizados de la organización. No almacenamos su contraseña."}
             </span>
           </div>
+          <DevCredit className="login-credit-mobile" />
         </div>
       </div>
     </div>

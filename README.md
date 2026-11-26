@@ -1,4 +1,7 @@
-# ComEx Analytics: torre de control logística
+# SIACOMEX · Torre de control logística
+
+Producto de **SIACOMEX** (Agencia de Aduanas Nivel 1) para **Kimberly-Clark**, desarrollado por **Techstack Colombia S.A.S.**
+La marca (nombres y logos) se configura en `frontend/src/components/Brand.tsx` y `frontend/public/brand/`.
 
 Dashboard web que lee el Excel de seguimiento logístico alojado en **SharePoint
 (Microsoft 365)** y lo convierte en indicadores, gráficos y alertas para la

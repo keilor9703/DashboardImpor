@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  BarChart3, Database, FileText, LogOut, Menu, Moon, RefreshCw, Ship, Sun, Table2, Warehouse,
+  BarChart3, Database, FileText, LogOut, Menu, Moon, RefreshCw, Sun, Table2, Warehouse,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
+import { CLIENTE, ClientLogo, DevCredit, PRODUCTO, ProductLogo } from "./Brand";
 import { apiPost, useApi } from "../api/client";
 import type { FuenteEstado } from "../api/types";
 import { horaRelativa } from "../lib/format";
@@ -64,11 +65,8 @@ export function Layout() {
       <div className="shell">
         <aside className={`sidebar ${menuOpen ? "open" : ""}`} onClick={(e) => e.target === e.currentTarget && setMenuOpen(false)}>
           <div className="brand">
-            <div className="brand-logo"><Ship size={20} /></div>
-            <div>
-              <div className="brand-name">ComEx Analytics</div>
-              <div className="brand-sub">Tablero directivo</div>
-            </div>
+            <ProductLogo onDark size="lg" />
+            <div className="brand-sub">{PRODUCTO.app}</div>
           </div>
           <nav className="nav">
             <div className="nav-label">Análisis</div>
@@ -83,6 +81,11 @@ export function Layout() {
             <span className={`sync-dot ${fuente?.error ? "off" : ""}`} />
             {fuente?.tipo === "graph" ? "SharePoint conectado" : fuente?.tipo === "file" ? "Archivo Excel" : "Datos simulados"}
             <div style={{ marginTop: 4 }}>{fuente ? `${fuente.embarques.toLocaleString("es-CO")} embarques · ${fuente.filas.toLocaleString("es-CO")} líneas` : "…"}</div>
+            <div className="sidebar-client">
+              <span>Cliente</span>
+              <ClientLogo size="sm" />
+            </div>
+            <DevCredit />
           </div>
         </aside>
 
@@ -94,6 +97,9 @@ export function Layout() {
               <div className="subtitle">{page.subtitle}</div>
             </div>
             <div className="spacer" />
+            <div className="topbar-client" title={`Cliente: ${CLIENTE.nombre}`}>
+              <ClientLogo size="sm" />
+            </div>
             <div className="freshness" title="Los datos se actualizan automáticamente cada 2 minutos">
               <span className={`sync-dot ${fuente?.error ? "off" : ""}`} />
               Actualizado {horaRelativa(fuente?.ultima_actualizacion)}
