@@ -48,6 +48,19 @@ class Settings(BaseSettings):
 
     local_file_path: str = ""
 
+    # ---------- Carga manual del Excel (solo con DATA_SOURCE=file) ----------
+    # Quién puede cargar: AUTH_MODE=password → usuarios de esta lista (vacía = todos los usuarios);
+    # AUTH_MODE=entra → quienes tengan este rol de aplicación (vacío = todos los autorizados).
+    upload_users: str = ""
+    upload_role: str = ""
+    upload_max_mb: int = 30
+    # Para que el archivo cargado NO se pierda cuando Render reinicia el servicio, se guarda como un commit
+    # en GitHub. Token fino con permiso «Contents: Read and write» solo sobre este repositorio.
+    github_token: str = ""
+    github_repo: str = ""                   # owner/nombre, ej. keilor9703/DashboardImpor
+    github_branch: str = "main"
+    github_file_path: str = "Insumos/Insumo1.xlsx"
+
     # ---------- Reglas de negocio ----------
     trm_cop_usd: float = 4000.0  # TRM para convertir valores en COP a USD
     eur_usd: float = 1.08

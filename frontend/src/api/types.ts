@@ -215,3 +215,25 @@ export interface HojaPdt {
   medidas: PdtMedida[];
   registros: number;
 }
+
+export interface VistaCarga {
+  nombre: string;
+  tamano: number;
+  lineas: number;
+  embarques: number;
+  registros_pdt: number;
+  hallazgos: Hallazgo[];
+  actual: { lineas: number; embarques: number; actualizado: string | null } | null;
+}
+
+export interface ResultadoCarga {
+  vista: VistaCarga;
+  persistido: boolean;
+  commit_url: string;
+  aviso: string | null;
+}
+
+export interface Me {
+  name: string;
+  can_upload: boolean;
+}

@@ -1,9 +1,10 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
-from ..auth import User, get_current_user
-from ..services import analytics
+from ..auth import User, get_current_user, require_uploader
+from ..config import Settings, get_settings
+from ..services import analytics, upload
 from ..services.repository import Repository, get_repository
 
 router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
@@ -83,3 +84,26 @@ def calidad(repo: Repository = Depends(get_repository)):
 def refrescar(repo: Repository = Depends(get_repository)):
     repo.data(force=True)
     return repo.status()
+
+
+@router.post("/datos/excel")
+async def cargar_excel(
+    archivo: UploadFile = File(...),
+    confirmar: bool = False,
+    user: User = Depends(require_uploader),
+    repo: Repository = Depends(get_repository),
+    s: Settings = Depends(get_settings),
+):
+    """Carga manual del Excel. Sin ``confirmar`` solo valida y devuelve una vista previa; con ``confirmar=true`` lo aplica."""
+    if s.data_source != "file":
+        raise HTTPException(409, "La carga manual solo está disponible cuando la fuente de datos es un archivo.")
+    limite = s.upload_max_mb * 1024 * 1024
+    contenido = await archivo.read(limite + 1)  # no leer más de lo permitido
+    try:
+        if not confirmar:
+            return {"vista": upload.validar(contenido, archivo.filename or "", s, repo).a_dict()}
+        r = upload.aplicar(contenido, archivo.filename or "", user.name, s, repo)
+    except upload.UploadError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"vista": r.vista.a_dict(), "persistido": r.persistido, "commit_url": r.commit_url, "aviso": r.aviso,
+            "fuente": repo.status()}

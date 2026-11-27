@@ -33,6 +33,13 @@ services:
         value: "300"
       - key: TRM_COP_USD
         value: "4000"
+      # --- Carga manual del Excel desde el tablero (se guarda como commit en GitHub) ---
+      - key: GITHUB_TOKEN
+        sync: false                  # token fino: Contents «Read and write» solo sobre este repositorio
+      - key: GITHUB_REPO
+        value: keilor9703/DashboardImpor
+      - key: GITHUB_BRANCH
+        value: main
       # --- URL del frontend en Vercel (para CORS), ej. https://comex-dashboard.vercel.app ---
       - key: CORS_ORIGINS
         sync: false

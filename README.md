@@ -184,6 +184,34 @@ El archivo se lee en streaming y se detiene donde terminan los datos, así que t
 (menos de 1 s y ~100 MB de RAM, aunque la hoja declare un millón de filas). Para probar con una copia local,
 use `DATA_SOURCE=file` y `LOCAL_FILE_PATH`.
 
+## Carga manual del Excel
+
+Mientras no esté activa la lectura desde SharePoint, los datos se actualizan desde el propio tablero:
+**Fuente y calidad → Actualizar el Excel** (visible solo para usuarios autorizados y con `DATA_SOURCE=file`).
+
+1. Se elige o arrastra el `.xlsx`. Antes de cambiar nada se **valida**: que sea un Excel real, que no pase de
+   `UPLOAD_MAX_MB` (30 MB), que tenga las hojas `Sheet1` e `In Transit PDT` y las columnas obligatorias.
+   Si algo falla, se explica qué corregir y no se reemplaza nada.
+2. Se muestra una **vista previa** (embarques, líneas y registros PDT, comparados con los actuales) y las observaciones de calidad.
+3. Al confirmar, el tablero usa el archivo nuevo **de inmediato** y el anterior queda como respaldo (`.anterior`).
+   Si el archivo no se pudiera procesar, se restaura el anterior automáticamente.
+4. **Persistencia:** el plan gratuito de Render borra el disco al reiniciarse, así que el archivo también se guarda como un
+   **commit en GitHub** (`Insumos/Insumo1.xlsx`); eso dispara un redespliegue de 1 a 2 minutos y deja el historial de versiones.
+
+**Configuración en Render → Environment:**
+
+| Variable | Valor |
+|---|---|
+| `GITHUB_TOKEN` | Token fino de GitHub (ver abajo) |
+| `GITHUB_REPO` | `keilor9703/DashboardImpor` |
+| `GITHUB_BRANCH` | `main` |
+| `UPLOAD_USERS` | *(opcional)* usuarios autorizados, separados por coma. Vacío = todos |
+
+**Crear el token:** GitHub → *Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token*.
+Repository access: **Only select repositories → DashboardImpor**. Permissions → Repository permissions → **Contents: Read and write**
+(nada más). Expiración: 1 año, con recordatorio para renovarlo. Sin token, la carga funciona pero **se pierde al reiniciarse el servidor**
+y el tablero lo avisa.
+
 ## Actualización de los datos
 
 - El backend guarda el Excel en caché durante `CACHE_TTL_SECONDS` (300 s en Render).

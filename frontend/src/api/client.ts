@@ -75,3 +75,19 @@ export async function apiPost<T>(path: string, getToken: () => Promise<string | 
   if (!res.ok) throw new ApiError(res.status, `Error ${res.status}`);
   return res.json();
 }
+
+/** Sube un archivo (multipart). Devuelve el JSON o lanza ApiError con el mensaje que entrega el backend. */
+export async function apiUpload<T>(path: string, file: File, params: Params, getToken: () => Promise<string | null>): Promise<T> {
+  const token = await getToken();
+  const form = new FormData();
+  form.append("archivo", file);
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, params), { method: "POST", body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } catch {
+    throw new ApiError(0, "No fue posible conectar con el servidor. Si estaba inactivo, espere un minuto e intente de nuevo.");
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, typeof body.detail === "string" ? body.detail : `Error ${res.status}`);
+  return body as T;
+}

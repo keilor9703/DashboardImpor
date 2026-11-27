@@ -23,9 +23,10 @@ class User(BaseModel):
     name: str
     email: str | None = None
     roles: list[str] = []
+    can_upload: bool = False
 
 
-DEMO_USER = User(oid="demo", name="Usuario Demo", email="demo@empresa.com", roles=["Dashboard.Viewer"])
+DEMO_USER = User(oid="demo", name="Usuario Demo", email="demo@empresa.com", roles=["Dashboard.Viewer"], can_upload=True)
 
 
 @lru_cache
@@ -88,7 +89,9 @@ def get_current_user(
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sesión vencida o inválida") from exc
         if claims["sub"] not in parse_users(settings.auth_users):  # usuario eliminado
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario sin acceso")
-        return User(oid=claims["sub"], name=claims["name"], roles=["Dashboard.Viewer"])
+        permitidos = {u.strip().lower() for u in settings.upload_users.split(",") if u.strip()}
+        return User(oid=claims["sub"], name=claims["name"], roles=["Dashboard.Viewer"],
+                    can_upload=not permitidos or claims["sub"] in permitidos)
 
     try:
         claims = decode_entra_token(credentials.credentials, settings)
@@ -104,4 +107,11 @@ def get_current_user(
         name=claims.get("name", "Usuario"),
         email=claims.get("preferred_username") or claims.get("email"),
         roles=roles,
+        can_upload=not settings.upload_role or settings.upload_role in roles,
     )
+
+
+def require_uploader(user: User = Depends(get_current_user)) -> User:
+    if not user.can_upload:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Su usuario no tiene permiso para cargar el Excel")
+    return user

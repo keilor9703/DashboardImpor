@@ -2,6 +2,8 @@ import { AlertTriangle, CheckCircle2, CircleAlert, Info, RefreshCw } from "lucid
 import { useApi } from "../api/client";
 import type { FuenteEstado, Hallazgo } from "../api/types";
 import { Card, useSync } from "../components/Layout";
+import { CargaExcel } from "../components/CargaExcel";
+import type { Me } from "../api/types";
 import { horaRelativa, int } from "../lib/format";
 
 const TIPO: Record<FuenteEstado["tipo"], string> = {
@@ -20,6 +22,7 @@ export function DataSource() {
   const { version, refresh, refreshing } = useSync();
   const { data, error } = useApi<{ hallazgos: Hallazgo[]; fuente: FuenteEstado }>("/api/datos/calidad", { v: version });
   const f = data?.fuente;
+  const { data: me } = useApi<Me>("/api/me");
 
   return (
     <div className="grid">
@@ -64,6 +67,7 @@ export function DataSource() {
           <li><b>Metas:</b> las de la hoja «In Transit PDT». Las rutas sin meta oficial usan una meta referencial (marcada «ref.»).</li>
         </ul>
       </Card>
+      {me?.can_upload && f?.tipo === "file" && <CargaExcel />}
       <Card className="span-12" title="Calidad de los datos"
         subtitle="Hallazgos en el Excel que afectan los indicadores · compártalos con los responsables del archivo">
         {data && !data.hallazgos.length && <div className="empty">✓ No se encontraron problemas de calidad.</div>}
