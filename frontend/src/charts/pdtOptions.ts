@@ -22,8 +22,7 @@ export function complianceByProcess(items: (ProcesoKpi & { esTotal?: boolean })[
       formatter: (p: { dataIndex: number }) => {
         const x = items[p.dataIndex];
         return `<div style="font-weight:600;margin-bottom:4px">${x.titulo}</div>` +
-          line("En meta", `${int(x.enMeta)} de ${int(x.medidos)}`) + line("Fuera de meta", int(x.fuera)) +
-          (x.sinRegistro ? line("Sin registro", int(x.sinRegistro)) : "");
+          line("En meta", `${int(x.enMeta)} de ${int(x.medidos)}`) + line("Fuera de meta", int(x.fuera));
       },
     },
     xAxis: { type: "value", min: 0, max: 100, show: false },

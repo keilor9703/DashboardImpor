@@ -177,7 +177,7 @@ function Indicadores({ hoja, filas }: { hoja: HojaPdt; filas: number[] }) {
   const procesosConTotal = useMemo(() => [
     ...ind.procesos,
     { key: "total", titulo: "Total PDT", titulo_es: "Total PDT", color: "", medidos: t.medidos, enMeta: t.enMeta, fuera: t.fuera,
-      sinRegistro: t.registros - t.medidos, cumplimiento: t.cumplimiento, realProm: t.realProm, metaProm: t.metaProm, diasPerdidos: 0, esTotal: true },
+      cumplimiento: t.cumplimiento, realProm: t.realProm, metaProm: t.metaProm, diasPerdidos: 0, esTotal: true },
   ], [ind, t]);
 
   if (!filas.length) return <div className="card empty">Sin registros con los filtros actuales.</div>;

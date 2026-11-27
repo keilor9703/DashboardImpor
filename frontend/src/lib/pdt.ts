@@ -94,7 +94,7 @@ const round1 = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10
 
 export interface ProcesoKpi {
   key: string; titulo: string; titulo_es: string; color: string;
-  medidos: number; enMeta: number; fuera: number; sinRegistro: number;
+  medidos: number; enMeta: number; fuera: number;
   cumplimiento: number | null; realProm: number | null; metaProm: number | null; diasPerdidos: number;
 }
 
@@ -125,7 +125,8 @@ export function indicadores(h: HojaPdt, filas: number[]) {
     desvProm: avg(pares.map(([t, m]) => t - m)),
   };
 
-  // --- Por etapa: cerrados + etapas completadas de los embarques en tránsito ---
+  // --- Por etapa: cerrados + etapas completadas de los embarques en tránsito.
+  //     Una etapa «Sin registro» (aún sin fecha de finalización) no tiene desviación y no se cuenta. ---
   const med = filas.map((i) => h.medidas[i]);
   const procesos: ProcesoKpi[] = h.procesos.map((p, k) => {
     const vals = med.map((m) => m.procesos[k]);
@@ -134,7 +135,6 @@ export function indicadores(h: HojaPdt, filas: number[]) {
     return {
       key: p.key, titulo: p.titulo, titulo_es: p.titulo_es, color: p.color,
       medidos: conDesv.length, enMeta, fuera: conDesv.length - enMeta,
-      sinRegistro: vals.filter(([r]) => r == null).length,
       cumplimiento: pct(enMeta, conDesv.length),
       realProm: avg(conDesv.map(([r]) => r).filter((x): x is number => x != null)),
       metaProm: avg(conDesv.map(([, m]) => m).filter((x): x is number => x != null)),
