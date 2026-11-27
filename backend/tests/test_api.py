@@ -62,7 +62,7 @@ def test_pdt_igual_a_suma_de_etapas(df):
 
 def test_dashboard_estructura(df):
     out = analytics.dashboard(df, analytics.Filtros(date(2026, 1, 1), HOY), hoy=HOY)
-    assert [k["id"] for k in out["kpis"]][:2] == ["embarques", "valor_usd"]
+    assert [k["id"] for k in out["kpis"]][:2] == ["embarques", "contenedores"]
     en_rango = df[(df["fecha_ref"] >= "2026-01-01") & (df["fecha_ref"] < "2026-11-27")]
     assert out["kpis"][0]["value"] == en_rango["embarque"].nunique()
     assert len(out["pipeline"]) == 5 and out["rutas"] and out["etapas"]
@@ -169,3 +169,11 @@ def test_auth_users_tolerante_y_diagnostico():
     assert "no tiene(n) un hash válido" in diagnose_users("gerencia:kjdvbfkdjvkfjd")
     assert "1 usuario(s): gerencia" in diagnose_users(f"gerencia:{h}")
 
+
+
+def test_la_api_no_expone_valores_monetarios():
+    """Los valores no están auditados: no deben viajar en ninguna respuesta del tablero."""
+    emb = client.get("/api/embarques", params={"tamano": 3}).json()["filas"][0]["embarque"]
+    for ruta in ("/api/dashboard", "/api/embarques", f"/api/embarques/{emb}"):
+        texto = client.get(ruta).text.lower()
+        assert "valor_usd" not in texto and "valor_en_curso" not in texto, ruta

@@ -7,7 +7,7 @@
 import type { EChartsCoreOption } from "echarts/core";
 import type { DashboardData, RutaEtapas } from "../api/types";
 import type { Tokens } from "../lib/theme";
-import { days, int, mesCorto, pct, usd } from "../lib/format";
+import { days, int, mesCorto, pct } from "../lib/format";
 
 const tooltipBase = (t: Tokens) => ({
   backgroundColor: t.surface,
@@ -25,11 +25,9 @@ const dot = (c: string) => `<span style="display:inline-block;width:9px;height:9
 const row = (color: string, label: string, value: string) =>
   `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span>${dot(color)}${label}</span><b>${value}</b></div>`;
 
-const usdAxis = (v: number) => (v === 0 ? "0" : usd(v).replace("US$ ", ""));
-
 export const ROUTE_COLORS = (t: Tokens) => [t.s1, t.s2, t.s3, t.muted];
 
-/** Valor movilizado por mes, apilado por ruta (rutas principales + «Otras»). */
+/** Embarques por mes, apilados por ruta (rutas principales + «Otras»). */
 export function monthlyByRoute(d: DashboardData["mensual"], rutas: string[], t: Tokens): EChartsCoreOption {
   const series = [...rutas, "Otras"];
   const colors = ROUTE_COLORS(t);
@@ -43,17 +41,17 @@ export function monthlyByRoute(d: DashboardData["mensual"], rutas: string[], t: 
       formatter: (ps: { dataIndex: number }[]) => {
         const p = d[ps[0].dataIndex];
         return `<div style="font-weight:600;margin-bottom:4px">${mesCorto(p.mes)}</div>` +
-          series.map((r, i) => row(colors[i], r, usd(p.rutas[r] ?? 0))).join("") +
-          `<div style="border-top:1px solid ${t.grid};margin-top:4px;padding-top:4px;color:${t.text2}">Total ${usd(p.valor_usd)} · ${int(p.embarques)} embarques</div>`;
+          series.map((r, i) => row(colors[i], r, int(p.rutas[r] ?? 0))).join("") +
+          `<div style="border-top:1px solid ${t.grid};margin-top:4px;padding-top:4px;color:${t.text2}">Total ${int(p.embarques)} embarques</div>`;
       },
     },
     xAxis: {
       type: "category", data: d.map((p) => mesCorto(p.mes)),
       axisTick: { show: false }, axisLine: { lineStyle: { color: t.border } }, axisLabel: axisLabel(t),
     },
-    yAxis: { type: "value", splitLine: { lineStyle: { color: t.grid } }, axisLabel: { ...axisLabel(t), formatter: usdAxis } },
+    yAxis: { type: "value", minInterval: 1, splitLine: { lineStyle: { color: t.grid } }, axisLabel: axisLabel(t) },
     series: series.map((r, i) => ({
-      name: r, type: "bar", stack: "valor", barMaxWidth: 44,
+      name: r, type: "bar", stack: "embarques", barMaxWidth: 44,
       data: d.map((p) => p.rutas[r] ?? 0),
       itemStyle: { color: colors[i], borderColor: t.surface, borderWidth: 1, borderRadius: i === series.length - 1 ? [4, 4, 0, 0] : 0 },
       emphasis: { focus: "series" },
@@ -71,7 +69,7 @@ export function pipeline(d: DashboardData["pipeline"], t: Tokens): EChartsCoreOp
       formatter: (p: { dataIndex: number }) => {
         const e = d[p.dataIndex];
         return `<div style="font-weight:600;margin-bottom:4px">${e.estado}</div>` +
-          row(t.s1, "Embarques", int(e.embarques)) + row(t.s1, "Contenedores", int(e.contenedores)) + row(t.s1, "Valor", usd(e.valor_usd));
+          row(t.s1, "Embarques", int(e.embarques)) + row(t.s1, "Contenedores", int(e.contenedores));
       },
     },
     xAxis: { type: "value", show: false },
@@ -152,7 +150,7 @@ export function carriers(d: DashboardData["navieras"], t: Tokens): EChartsCoreOp
       formatter: (p: { dataIndex: number }) => {
         const n = rows[p.dataIndex];
         return `<div style="font-weight:600;margin-bottom:4px">${n.naviera}</div>` +
-          row(t.s1, "Tránsito promedio", days(n.transito_promedio)) + row(t.s1, "Embarques", int(n.embarques)) + row(t.s1, "Valor", usd(n.valor_usd));
+          row(t.s1, "Tránsito promedio", days(n.transito_promedio)) + row(t.s1, "Embarques", int(n.embarques));
       },
     },
     xAxis: { type: "value", show: false },
@@ -169,7 +167,7 @@ export function carriers(d: DashboardData["navieras"], t: Tokens): EChartsCoreOp
   };
 }
 
-/** Valor por franquicia; «Sin franquicia» en gris para evidenciar el vacío de datos. */
+/** Embarques por franquicia; «Sin franquicia» en gris para evidenciar el vacío de datos. */
 export function franchises(d: DashboardData["franquicias"], t: Tokens): EChartsCoreOption {
   return {
     grid: { left: 4, right: 92, top: 4, bottom: 4, containLabel: true },
@@ -178,7 +176,7 @@ export function franchises(d: DashboardData["franquicias"], t: Tokens): EChartsC
       formatter: (p: { dataIndex: number }) => {
         const f = d[p.dataIndex];
         return `<div style="font-weight:600;margin-bottom:4px">${f.franquicia}</div>` +
-          row(t.s1, "Valor", usd(f.valor_usd)) + row(t.s1, "Participación", pct(f.participacion));
+          row(t.s1, "Embarques", int(f.embarques)) + row(t.s1, "Participación", pct(f.participacion));
       },
     },
     xAxis: { type: "value", show: false },
@@ -189,11 +187,11 @@ export function franchises(d: DashboardData["franquicias"], t: Tokens): EChartsC
     },
     series: [{
       type: "bar", barWidth: 12,
-      data: d.map((f) => ({ value: f.valor_usd, itemStyle: { color: f.franquicia === "Sin franquicia" ? t.muted : t.s1 } })),
+      data: d.map((f) => ({ value: f.embarques, itemStyle: { color: f.franquicia === "Sin franquicia" ? t.muted : t.s1 } })),
       itemStyle: { borderRadius: [0, 4, 4, 0] },
       label: {
         show: true, position: "right", fontFamily: t.font, fontSize: 12,
-        formatter: (p: { dataIndex: number }) => `{v|${usd(d[p.dataIndex].valor_usd)}}  {p|${pct(d[p.dataIndex].participacion, 0)}}`,
+        formatter: (p: { dataIndex: number }) => `{v|${int(d[p.dataIndex].embarques)}}  {p|${pct(d[p.dataIndex].participacion, 0)}}`,
         rich: { v: { color: t.text, fontWeight: 600 }, p: { color: t.text3 } },
       },
     }],

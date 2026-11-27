@@ -233,10 +233,6 @@ def diagnostico(raw_rows: int, df: pd.DataFrame) -> list[dict]:
                     "nivel": "serious"})
     out.append(item("sin_franquicia", "Líneas sin franquicia", (df["franquicia"] == "Sin franquicia").sum(),
                     "La columna «Franchise» está vacía o en 0 (posible fórmula de búsqueda sin resultado)."))
-    out.append(item("sin_valor", "Líneas sin valor", (df["valor_fuente"] == "Sin valor").sum(),
-                    "No tienen valor en factura de importación, PO ni factura de exportación."))
-    out.append(item("valor_desde_cop", "Valor convertido desde COP", (df["valor_fuente"] == "Factura exportación").sum(),
-                    "El valor USD se estimó con la factura de exportación en COP y la TRM configurada.", "info"))
     out.append(item("sin_po_fecha", "Líneas sin fecha de PO", df["po_fecha"].isna().sum(),
                     "Sin fecha de creación de la PO no se puede medir el lead time total (PDT)."))
     cerrados_sin_hitos = df[(df["estado"] == ESTADO_FINAL) & df[["atd", "ata", "despacho", "sap"]].isna().any(axis=1)]

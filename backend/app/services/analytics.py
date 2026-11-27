@@ -77,7 +77,6 @@ def unidades(d: pd.DataFrame) -> pd.DataFrame:
     cols = ["embarque", "ruta", "modo_cod", "modo_txt", "estado", "naviera", "forwarder", "pdt", "meta_pdt", "meta_oficial",
             *[f"d_{k}" for k, *_ in ETAPAS], *[f"m_{k}" for k, *_ in ETAPAS]]
     u = d.groupby("unidad", sort=False)[cols].first()
-    u["valor_usd"] = d.groupby("unidad", sort=False)["valor_usd"].sum()
     u["a_tiempo"] = (u["pdt"] <= u["meta_pdt"]).where(u["pdt"].notna() & u["meta_pdt"].notna())
     return u
 
@@ -92,7 +91,6 @@ def embarques(d: pd.DataFrame) -> pd.DataFrame:
     for h in HITOS:
         e[h] = g[h].min() if h in ("po_fecha", "pickup", "etd", "atd", "eta") else g[h].max()
     e["fecha_ref"] = g["fecha_ref"].min()
-    e["valor_usd"] = g["valor_usd"].sum()
     e["lineas"] = g.size()
     e["contenedores"] = g["contenedor"].nunique()
     e["pos"] = g["po"].nunique()
@@ -107,7 +105,6 @@ def _metricas(d: pd.DataFrame) -> dict:
     con_meta = cerradas[cerradas["a_tiempo"].notna()] if len(u) else u
     return {
         "embarques": d["embarque"].nunique(),
-        "valor_usd": d["valor_usd"].sum(),
         "contenedores": d["contenedor"].nunique(),
         "pdt_promedio": cerradas["pdt"].mean() if len(cerradas) else None,
         "cumplimiento_pdt": con_meta["a_tiempo"].astype(float).mean() * 100 if len(con_meta) else None,
@@ -123,7 +120,6 @@ def _delta(cur, prev):
 
 KPI_DEFS = [
     ("embarques", "Embarques", "int", "up"),
-    ("valor_usd", "Valor movilizado", "usd", "up"),
     ("contenedores", "Contenedores", "int", "up"),
     ("pdt_promedio", "Lead time total (PDT)", "days", "down"),
     ("cumplimiento_pdt", "Cumplimiento de PDT", "pct", "up"),
@@ -149,7 +145,7 @@ def _alertas(abiertos: pd.DataFrame, hoy: pd.Timestamp) -> list[dict]:
             "embarque": emb, "estado": r["estado"], "ruta": r["ruta"], "modo": r["modo_txt"],
             "etapa": next(e[1] for e in ETAPAS if e[0] == etapa),
             "dias": _num(dias, 1), "meta": _num(meta, 1), "exceso": _num(exceso, 1),
-            "valor_usd": _num(r["valor_usd"]), "contenedores": int(r["contenedores"]),
+            "contenedores": int(r["contenedores"]),
             "forwarder": r["forwarder"], "meta_oficial": bool(r["meta_oficial"]),
             "severidad": "critical" if dias > 2 * max(meta, 1) else "serious",
         })
@@ -170,17 +166,17 @@ def dashboard(df: pd.DataFrame, f: Filtros, hoy: date | None = None) -> dict:
     mensual, rutas_top = [], []
     if len(act):
         # Rutas principales calculadas sobre TODO el archivo: el color de cada ruta no cambia al filtrar
-        rutas_top = df.groupby("ruta")["valor_usd"].sum().sort_values(ascending=False).head(3).index.tolist()
+        rutas_top = df.groupby("ruta")["embarque"].nunique().sort_values(ascending=False).head(3).index.tolist()
         a = act.assign(mes=act["fecha_ref"].dt.to_period("M"))
         inicio = max(pd.Timestamp(f.desde).to_period("M"), a["mes"].min())
         for mes in pd.period_range(inicio, pd.Timestamp(f.hasta).to_period("M"), freq="M"):
             g = a[a["mes"] == mes]
             mm = _metricas(g)
-            por_ruta = g.groupby("ruta")["valor_usd"].sum()
+            por_ruta = g.groupby("ruta")["embarque"].nunique()
             mensual.append({
                 "mes": str(mes),
                 **{k: _num(v, 2) for k, v in mm.items()},
-                "rutas": {r: _num(por_ruta.get(r, 0)) for r in rutas_top} | {"Otras": _num(por_ruta.drop(rutas_top, errors="ignore").sum())},
+                "rutas": {r: int(por_ruta.get(r, 0)) for r in rutas_top} | {"Otras": int(por_ruta.drop(rutas_top, errors="ignore").sum())},
             })
 
     kpis = [{
@@ -196,7 +192,6 @@ def dashboard(df: pd.DataFrame, f: Filtros, hoy: date | None = None) -> dict:
     for _, label, _ in ESTADOS[:-1]:
         g = abiertos[abiertos["estado"] == label] if len(abiertos) else abiertos
         pipeline.append({"estado": label, "embarques": int(len(g)),
-                         "valor_usd": _num(g["valor_usd"].sum()) if len(g) else 0,
                          "contenedores": int(g["contenedores"].sum()) if len(g) else 0})
 
     alertas = _alertas(abiertos, hoy_ts) if len(abiertos) else []
@@ -211,7 +206,7 @@ def dashboard(df: pd.DataFrame, f: Filtros, hoy: date | None = None) -> dict:
         proximos = [{
             "embarque": emb, "estado": r["estado"], "ruta": r["ruta"], "modo": r["modo_txt"], "eta": _iso(r["eta_vigente"]),
             "dias": _num((r["eta_vigente"] - hoy_ts).total_seconds() / 86400, 0), "naviera": r["naviera"],
-            "contenedores": int(r["contenedores"]), "valor_usd": _num(r["valor_usd"]),
+            "contenedores": int(r["contenedores"]),
         } for emb, r in transito.head(8).iterrows()]
 
     # --- Lead time por etapa vs meta, por ruta ---
@@ -225,7 +220,7 @@ def dashboard(df: pd.DataFrame, f: Filtros, hoy: date | None = None) -> dict:
             ge = e_act[(e_act["ruta"] == ruta) & (e_act["modo_txt"] == modo)]
             rutas.append({
                 "ruta": ruta, "modo": modo, "embarques": int(len(ge)), "en_curso": int((ge["estado"] != ESTADO_FINAL).sum()),
-                "valor_usd": _num(g["valor_usd"].sum()), "contenedores": int(ge["contenedores"].sum()),
+                "contenedores": int(ge["contenedores"].sum()),
                 "pdt_promedio": _num(cerr["pdt"].mean(), 1) if len(cerr) else None,
                 "meta_pdt": _num(g["meta_pdt"].iloc[0], 1), "meta_oficial": bool(g["meta_oficial"].iloc[0]),
                 "cumplimiento": _num(con_meta["a_tiempo"].astype(float).mean() * 100, 1) if len(con_meta) else None,
@@ -240,7 +235,7 @@ def dashboard(df: pd.DataFrame, f: Filtros, hoy: date | None = None) -> dict:
                                 "meta": _num(g[f"m_{k}"].iloc[0], 1), "n": int(g[f"d_{k}"].notna().sum())}
                                for k, lbl, *_ in ETAPAS],
                 })
-        rutas.sort(key=lambda r: -(r["valor_usd"] or 0))
+        rutas.sort(key=lambda r: -r["embarques"])
         etapas.sort(key=lambda r: -r["unidades"])
 
     navieras = []
@@ -248,16 +243,15 @@ def dashboard(df: pd.DataFrame, f: Filtros, hoy: date | None = None) -> dict:
     if len(sea):
         for nav, g in sea.groupby("naviera"):
             navieras.append({"naviera": nav, "embarques": int(g["embarque"].nunique()),
-                             "transito_promedio": _num(g["d_transito"].mean(), 1),
-                             "valor_usd": _num(g["valor_usd"].sum())})
+                             "transito_promedio": _num(g["d_transito"].mean(), 1)})
         navieras.sort(key=lambda n: -n["embarques"])
 
     franquicias = []
     if len(act):
-        fr = act.groupby("franquicia")["valor_usd"].sum().sort_values(ascending=False)
+        fr = act.groupby("franquicia")["embarque"].nunique().sort_values(ascending=False)
         total = fr.sum() or 1
         orden = [x for x in fr.index if x != "Sin franquicia"] + (["Sin franquicia"] if "Sin franquicia" in fr.index else [])
-        franquicias = [{"franquicia": k, "valor_usd": _num(fr[k]), "participacion": _num(fr[k] / total * 100, 1)} for k in orden]
+        franquicias = [{"franquicia": k, "embarques": int(fr[k]), "participacion": _num(fr[k] / total * 100, 1)} for k in orden]
 
     canales = []
     if len(act):
@@ -270,7 +264,6 @@ def dashboard(df: pd.DataFrame, f: Filtros, hoy: date | None = None) -> dict:
                     "anterior_desde": prev_desde.isoformat(), "anterior_hasta": prev_hasta.isoformat()},
         "resumen": {
             "en_curso": int(len(abiertos)),
-            "valor_en_curso_usd": _num(abiertos["valor_usd"].sum()) if len(abiertos) else 0,
             "contenedores_en_curso": int(abiertos["contenedores"].sum()) if len(abiertos) else 0,
             "con_alerta": len(alertas),
         },
@@ -301,7 +294,7 @@ def opciones_filtros(df: pd.DataFrame) -> dict:
     }
 
 
-TABLA_COLS = ["embarque", "estado", "ruta", "modo_txt", "forwarder", "naviera", "contenedores", "lineas", "valor_usd",
+TABLA_COLS = ["embarque", "estado", "ruta", "modo_txt", "forwarder", "naviera", "contenedores", "lineas",
               "pickup", "atd", "eta", "ata", "despacho", "sap", "pdt", "meta_pdt"]
 
 
@@ -330,7 +323,7 @@ def lista_embarques(df: pd.DataFrame, f: Filtros, q: str = "", estado: str | Non
         filas.append({
             "embarque": row["embarque"], "estado": row["estado"], "ruta": row["ruta"], "modo": row["modo_txt"],
             "forwarder": row["forwarder"], "naviera": row["naviera"], "contenedores": int(row["contenedores"]),
-            "lineas": int(row["lineas"]), "valor_usd": _num(row["valor_usd"]),
+            "lineas": int(row["lineas"]),
             **{h: _iso(row[h]) for h in ("pickup", "atd", "eta", "ata", "despacho", "sap")},
             "pdt": _num(row["pdt"], 1), "meta_pdt": _num(row["meta_pdt"], 1),
         })
@@ -353,17 +346,16 @@ def detalle_embarque(df: pd.DataFrame, embarque: str, hoy: date | None = None) -
             real = (hoy_ts - inicio).total_seconds() / 86400
         etapas.append({"key": k, "label": label, "inicio": _iso(inicio), "fin": _iso(cierre),
                        "real": _num(real, 1), "meta": _num(e[f"m_{k}"], 1), "en_curso": bool(en_curso)})
-    lineas = d.sort_values(["po", "sku"])[["po", "sku", "material", "franquicia", "cantidad", "valor_usd", "contenedor"]]
+    lineas = d.sort_values(["po", "sku"])[["po", "sku", "material", "franquicia", "cantidad", "contenedor"]]
     lineas = lineas.astype(object).where(lineas.notna(), None).to_dict(orient="records")
     for li in lineas:
-        li["valor_usd"] = _num(li["valor_usd"])
         li["cantidad"] = _num(li["cantidad"], 0)
     return {
         "embarque": embarque, "estado": e["estado"], "ruta": e["ruta"], "modo": e["modo_txt"],
         "forwarder": e["forwarder"], "naviera": e["naviera"], "agente_aduana": e["agente_aduana"], "canal": e["canal"],
         "documento_transporte": e["shipment_ref"], "booking": e["booking"],
         "contenedores": sorted(d["contenedor"].dropna().unique().tolist()),
-        "valor_usd": _num(e["valor_usd"]), "pdt": _num(e["pdt"], 1), "meta_pdt": _num(e["meta_pdt"], 1),
+        "pdt": _num(e["pdt"], 1), "meta_pdt": _num(e["meta_pdt"], 1),
         "meta_oficial": bool(e["meta_oficial"]),
         "hitos": {h: _iso(e[h]) for h in HITOS},
         "etapas": etapas,

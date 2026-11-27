@@ -7,7 +7,7 @@ import { carriers, franchises, monthlyByRoute, pipeline } from "../charts/option
 import { Card, useSync } from "../components/Layout";
 import { FilterBar } from "../components/FilterBar";
 import { KpiCard } from "../components/KpiCard";
-import { days, int, pct, usd } from "../lib/format";
+import { days, int, pct } from "../lib/format";
 import { useFilters } from "../lib/filters";
 
 const ROUTE_VARS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-muted)"];
@@ -27,16 +27,16 @@ export function Dashboard() {
       {!data && loading && <Skeleton />}
       {data && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20, opacity: loading ? 0.65 : 1, transition: "opacity .2s" }}>
-          <div className="kpis">
+          <div className="kpis kpis-5">
             {data.kpis.map((k) => <KpiCard key={k.id} kpi={k} color="text2" />)}
           </div>
 
           <div className="grid">
-            <Card className="span-8" title="Valor movilizado por mes"
-              subtitle="USD por ruta · según fecha de zarpe (o recogida si aún no zarpa)"
+            <Card className="span-8" title="Embarques por mes"
+              subtitle="Por ruta · según fecha de zarpe (o recogida si aún no zarpa)"
               actions={<Legend items={[...data.rutas_top, "Otras"]} />}>
               {data.mensual.length ? (
-                <EChart ariaLabel="Valor movilizado por mes y ruta" height={300}
+                <EChart ariaLabel="Embarques por mes y ruta" height={300}
                   build={(t) => monthlyByRoute(data.mensual, data.rutas_top, t)} deps={[data.mensual, data.rutas_top]} />
               ) : <Empty />}
             </Card>
@@ -44,7 +44,7 @@ export function Dashboard() {
             <Card className="span-4" title="Torre de control" subtitle="Embarques abiertos hoy, por estado">
               <div className="stat-row">
                 <div><b className="num">{int(data.resumen.en_curso)}</b><span>Embarques abiertos</span></div>
-                <div><b className="num">{usd(data.resumen.valor_en_curso_usd)}</b><span>Valor en curso</span></div>
+                <div><b className="num">{int(data.resumen.contenedores_en_curso)}</b><span>Contenedores</span></div>
                 <div className={data.resumen.con_alerta ? "alert" : ""}><b className="num">{int(data.resumen.con_alerta)}</b><span>Fuera de meta</span></div>
               </div>
               <EChart ariaLabel="Embarques abiertos por estado" height={200}
@@ -55,9 +55,9 @@ export function Dashboard() {
               <Arribos data={data} />
             </Card>
 
-            <Card className="span-7" title="Valor por franquicia" subtitle="USD · en gris, líneas sin franquicia en el Excel">
+            <Card className="span-7" title="Embarques por franquicia" subtitle="En gris, líneas sin franquicia en el Excel">
               {data.franquicias.length ? (
-                <EChart ariaLabel="Valor por franquicia" height={Math.max(160, data.franquicias.length * 30)}
+                <EChart ariaLabel="Embarques por franquicia" height={Math.max(160, data.franquicias.length * 30)}
                   build={(t) => franchises(data.franquicias, t)} deps={[data.franquicias]} />
               ) : <Empty />}
             </Card>
@@ -115,7 +115,6 @@ function Arribos({ data }: { data: DashboardData }) {
             <span>{a.ruta} · {a.naviera !== "Sin dato" ? a.naviera : a.modo}</span>
           </div>
           <div className="how">
-            <b className="num">{usd(a.valor_usd)}</b>
             <span><Ship size={12} /> {a.contenedores} cont.</span>
           </div>
         </li>
@@ -138,7 +137,7 @@ function Rutas({ rows }: { rows: RutaResumen[] }) {
         <thead>
           <tr>
             <th>Ruta</th><th className="r">Embarques</th><th className="r">Abiertos</th>
-            <th className="r">Contenedores</th><th className="r">Valor</th><th className="r">Tránsito prom.</th>
+            <th className="r">Contenedores</th><th className="r">Tránsito prom.</th>
             <th className="r">PDT real</th><th className="r">Meta PDT</th><th className="r">Cumplimiento</th>
           </tr>
         </thead>
@@ -151,7 +150,6 @@ function Rutas({ rows }: { rows: RutaResumen[] }) {
                 <td className="r num">{int(r.embarques)}</td>
                 <td className="r num">{int(r.en_curso)}</td>
                 <td className="r num">{int(r.contenedores)}</td>
-                <td className="r num">{usd(r.valor_usd)}</td>
                 <td className="r num">{days(r.transito_promedio)}</td>
                 <td className={`r num ${over ? "text-bad strong" : ""}`}>{days(r.pdt_promedio)}</td>
                 <td className="r num">
@@ -177,7 +175,7 @@ function Alertas({ data }: { data: DashboardData }) {
           <tr>
             <th>Prioridad</th><th>Embarque</th><th>Ruta</th><th>Etapa actual</th>
             <th className="r" title="Días en la etapa actual">Días</th><th className="r">Meta</th><th className="r">Exceso</th>
-            <th className="r">Valor</th><th>Forwarder</th>
+            <th>Forwarder</th>
           </tr>
         </thead>
         <tbody>
@@ -194,7 +192,6 @@ function Alertas({ data }: { data: DashboardData }) {
               <td className="r num strong">{a.dias.toLocaleString("es-CO")}</td>
               <td className="r num">{a.meta}{!a.meta_oficial && <span className="ref-tag" title="Meta referencial">ref.</span>}</td>
               <td className="r num text-bad strong">+{a.exceso.toLocaleString("es-CO")} d</td>
-              <td className="r num">{usd(a.valor_usd)}</td>
               <td className="muted ellipsis" title={a.forwarder}>{a.forwarder}</td>
             </tr>
           ))}
@@ -235,7 +232,7 @@ function Empty({ text = "Sin datos para los filtros seleccionados." }: { text?: 
 function Skeleton() {
   return (
     <>
-      <div className="kpis">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="card skeleton" style={{ height: 132 }} />)}</div>
+      <div className="kpis kpis-5">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="card skeleton" style={{ height: 132 }} />)}</div>
       <div className="grid">
         <div className="card skeleton span-8" style={{ height: 360 }} />
         <div className="card skeleton span-4" style={{ height: 360 }} />

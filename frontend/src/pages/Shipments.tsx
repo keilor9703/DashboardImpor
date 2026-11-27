@@ -5,7 +5,7 @@ import { useApi } from "../api/client";
 import type { EmbarqueDetalle, EmbarqueFila, EmbarquesPage, OpcionesFiltros } from "../api/types";
 import { FilterBar } from "../components/FilterBar";
 import { useSync } from "../components/Layout";
-import { days, fecha, int, usd } from "../lib/format";
+import { days, fecha, int } from "../lib/format";
 import { useFilters } from "../lib/filters";
 
 type Col = { key: keyof EmbarqueFila | "estado"; label: string; align?: "r"; render?: (o: EmbarqueFila) => React.ReactNode };
@@ -29,7 +29,6 @@ const COLS: Col[] = [
   { key: "naviera", label: "Naviera" },
   { key: "contenedores", label: "Cont.", align: "r" },
   { key: "lineas", label: "Líneas", align: "r" },
-  { key: "valor_usd", label: "Valor USD", align: "r", render: (o) => usd(o.valor_usd, false) },
   { key: "atd", label: "Zarpe", render: (o) => fecha(o.atd) },
   { key: "eta", label: "ETA", render: (o) => fecha(o.eta) },
   { key: "ata", label: "Arribo", render: (o) => fecha(o.ata) },
@@ -159,7 +158,6 @@ function Detalle({ id, onClose }: { id: string; onClose: () => void }) {
         {data && (
           <div className="drawer-body">
             <div className="stat-row">
-              <div><b className="num">{usd(data.valor_usd)}</b><span>Valor</span></div>
               <div><b className="num">{data.pdt != null ? days(data.pdt) : "En curso"}</b><span>PDT real</span></div>
               <div><b className="num">{days(data.meta_pdt)}</b><span>Meta PDT{!data.meta_oficial && " (ref.)"}</span></div>
             </div>
@@ -202,13 +200,13 @@ function Detalle({ id, onClose }: { id: string; onClose: () => void }) {
             <h4>Productos ({int(data.lineas.length)} líneas)</h4>
             <div className="table-wrap">
               <table className="data compact">
-                <thead><tr><th>PO</th><th>SKU</th><th>Producto</th><th className="r">Cantidad</th><th className="r">Valor</th></tr></thead>
+                <thead><tr><th>PO</th><th>SKU</th><th>Producto</th><th className="r">Cantidad</th></tr></thead>
                 <tbody>
                   {data.lineas.map((l, i) => (
                     <tr key={i}>
                       <td>{l.po ?? "—"}</td><td>{l.sku ?? "—"}</td>
                       <td title={l.franquicia} style={{ whiteSpace: "normal", minWidth: 180 }}>{l.material ?? "—"}</td>
-                      <td className="r num">{int(l.cantidad)}</td><td className="r num">{usd(l.valor_usd)}</td>
+                      <td className="r num">{int(l.cantidad)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -14,7 +14,6 @@ export interface Kpi {
 export interface MesPunto {
   mes: string;
   embarques: number;
-  valor_usd: number;
   rutas: Record<string, number>;
 }
 
@@ -27,7 +26,6 @@ export interface Alerta {
   dias: number;
   meta: number;
   exceso: number;
-  valor_usd: number;
   contenedores: number;
   forwarder: string;
   meta_oficial: boolean;
@@ -43,7 +41,6 @@ export interface Arribo {
   dias: number;
   naviera: string;
   contenedores: number;
-  valor_usd: number;
 }
 
 export interface EtapaValor {
@@ -69,7 +66,6 @@ export interface RutaResumen {
   modo: string;
   embarques: number;
   en_curso: number;
-  valor_usd: number;
   contenedores: number;
   pdt_promedio: number | null;
   meta_pdt: number | null;
@@ -94,15 +90,15 @@ export interface FuenteEstado {
 
 export interface DashboardData {
   periodo: { desde: string; hasta: string; anterior_desde: string; anterior_hasta: string };
-  resumen: { en_curso: number; valor_en_curso_usd: number; contenedores_en_curso: number; con_alerta: number };
+  resumen: { en_curso: number; contenedores_en_curso: number; con_alerta: number };
   kpis: Kpi[];
   mensual: MesPunto[];
   rutas_top: string[];
-  pipeline: { estado: string; embarques: number; valor_usd: number; contenedores: number }[];
+  pipeline: { estado: string; embarques: number; contenedores: number }[];
   etapas: RutaEtapas[];
   rutas: RutaResumen[];
-  navieras: { naviera: string; embarques: number; transito_promedio: number | null; valor_usd: number }[];
-  franquicias: { franquicia: string; valor_usd: number; participacion: number }[];
+  navieras: { naviera: string; embarques: number; transito_promedio: number | null }[];
+  franquicias: { franquicia: string; embarques: number; participacion: number }[];
   canales: { canal: string; embarques: number }[];
   alertas: Alerta[];
   proximos: Arribo[];
@@ -131,7 +127,6 @@ export interface EmbarqueFila {
   naviera: string;
   contenedores: number;
   lineas: number;
-  valor_usd: number;
   pickup: string | null;
   atd: string | null;
   eta: string | null;
@@ -161,13 +156,12 @@ export interface EmbarqueDetalle {
   documento_transporte: string | null;
   booking: string | null;
   contenedores: string[];
-  valor_usd: number;
   pdt: number | null;
   meta_pdt: number | null;
   meta_oficial: boolean;
   hitos: Record<string, string | null>;
   etapas: { key: string; label: string; inicio: string | null; fin: string | null; real: number | null; meta: number | null; en_curso: boolean }[];
-  lineas: { po: string | null; sku: string | null; material: string | null; franquicia: string; cantidad: number | null; valor_usd: number; contenedor: string | null }[];
+  lineas: { po: string | null; sku: string | null; material: string | null; franquicia: string; cantidad: number | null; contenedor: string | null }[];
 }
 
 export interface Hallazgo {

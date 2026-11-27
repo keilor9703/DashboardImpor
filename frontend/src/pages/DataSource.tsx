@@ -59,7 +59,6 @@ export function DataSource() {
       <Card className="span-5" title="Cómo se calcula" subtitle="Reglas aplicadas al Excel">
         <ul className="rules">
           <li><b>Embarque:</b> número de exportación; si no existe, documento de transporte; si no, la PO.</li>
-          <li><b>Valor USD:</b> factura de importación → valor de la PO → factura de exportación (COP convertido con la TRM configurada).</li>
           <li><b>Fecha del período:</b> zarpe (ATD); si no ha zarpado, recogida, ETD o mes de exportación.</li>
           <li><b>PDT:</b> días entre la creación de la PO y el ingreso a SAP, medido por embarque y PO, como en la hoja «In Transit PDT».</li>
           <li><b>Metas:</b> las de la hoja «In Transit PDT». Las rutas sin meta oficial usan una meta referencial (marcada «ref.»).</li>
