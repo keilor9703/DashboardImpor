@@ -562,3 +562,10 @@ table.data td.ellipsis { max-width: 150px; overflow: hidden; text-overflow: elli
 .denied-box p { margin: 0; color: var(--text-2); line-height: 1.55; }
 .denied-icon { color: var(--serious); }
 table.data td a { color: var(--accent); }
+
+/* ---------- Icono de cumplimiento del Total PDT (formato condicional del Excel) ---------- */
+.pdt-total { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; font-weight: 600; }
+.pdt-ok { color: var(--good); flex: none; }
+.pdt-ko { color: var(--critical); flex: none; }
+.pdt-legend { margin-left: auto; display: inline-flex; gap: 16px; font-size: 12.5px; color: var(--text-2); }
+.pdt-legend span { display: inline-flex; align-items: center; gap: 5px; }

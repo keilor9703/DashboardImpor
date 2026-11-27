@@ -3,9 +3,10 @@
  * sus columnas de detalle. Columnas ordenables; filtra según los filtros del reporte.
  */
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, CircleCheck, CircleX } from "lucide-react";
 import type { HojaPdt, PdtColumna, PdtProceso } from "../api/types";
 import { fecha } from "../lib/format";
+import { STATUS_CERRADO } from "../lib/pdt";
 
 const n1 = (v: number) => v.toLocaleString("es-CO", { maximumFractionDigits: 1 });
 /** Texto legible sobre el color del proceso (el azul de la hoja lleva texto blanco). */
@@ -27,6 +28,20 @@ function Celda({ v, col }: { v: string | number | null; col: PdtColumna }) {
   if (col.tipo === "dias" && typeof v === "number") return <>{n1(v)} d</>;
   if (col.tipo === "texto") return <span className="clamp" title={String(v)}>{String(v)}</span>;
   return <>{String(v)}</>;
+}
+
+/** Total PDT con el icono del formato condicional del Excel: ✓ cumple (≤ meta), ✗ no cumple (> meta). */
+function TotalPdt({ total, meta, cerrado }: { total: number; meta: number | null; cerrado: boolean }) {
+  if (meta == null) return <>{n1(total)} d</>;
+  const cumple = total <= meta;
+  const Icon = cumple ? CircleCheck : CircleX;
+  const nota = cerrado ? "" : " · embarque en curso: PDT acumulado a hoy";
+  return (
+    <span className="pdt-total" title={`${cumple ? "Cumple" : "No cumple"}: ${n1(total)} d ${cumple ? "≤" : ">"} meta ${n1(meta)} d${nota}`}>
+      <Icon size={17} strokeWidth={2.4} className={cumple ? "pdt-ok" : "pdt-ko"} aria-label={cumple ? "Cumple la meta" : "No cumple la meta"} />
+      <span>{n1(total)} d</span>
+    </span>
+  );
 }
 
 /** Resumen de un proceso calculado sobre las filas visibles. */
@@ -100,6 +115,12 @@ export function PdtSheet({ hoja, filas }: { hoja: HojaPdt; filas: number[] }) {
         <span className="pdt-dot" style={{ background: proc.color }} />
         <b>{proc.titulo}</b>
         <span className="muted">· {proc.titulo_es} · {visibles.length} de {hoja.registros} registros · clic en un encabezado para ordenar</span>
+        {proc.key === "total" && (
+          <span className="pdt-legend">
+            <span><CircleCheck size={15} className="pdt-ok" /> Cumple (≤ meta)</span>
+            <span><CircleX size={15} className="pdt-ko" /> No cumple (&gt; meta)</span>
+          </span>
+        )}
       </div>
       <div className="table-wrap pdt-table">
         <table className="data compact">
@@ -120,9 +141,15 @@ export function PdtSheet({ hoja, filas }: { hoja: HojaPdt; filas: number[] }) {
               return (
                 <tr key={i}>
                   {hoja.identidad.map((c) => <td key={c.idx} className={c.idx === hoja.roles.embarque ? "strong" : ""}>{f[c.idx] ?? "—"}</td>)}
-                  {proc.columnas.map((c) => (
-                    <td key={c.idx} className={c.tipo === "texto" ? "pdt-text" : "r num"}><Celda v={f[c.idx]} col={c} /></td>
-                  ))}
+                  {proc.columnas.map((c) => {
+                    const [t, m] = hoja.medidas[i].total;
+                    const esTotal = proc.key === "total" && c.idx === proc.roles.real && t != null;
+                    return (
+                      <td key={c.idx} className={c.tipo === "texto" ? "pdt-text" : "r num"}>
+                        {esTotal ? <TotalPdt total={t} meta={m} cerrado={f[hoja.roles.status ?? 0] === STATUS_CERRADO} /> : <Celda v={f[c.idx]} col={c} />}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
