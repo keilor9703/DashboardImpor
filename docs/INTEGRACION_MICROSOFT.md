@@ -1,16 +1,17 @@
-# Integración con Microsoft 365 — Guía para TI de SIACOMEX
+# Integración con Microsoft 365 — Guía para TI de Kenvue
 
 **Torre de control logística SIACOMEX** · Desarrollado por Techstack Colombia S.A.S.
 
-Esta guía configura dos cosas en el Microsoft 365 de **SIACOMEX**:
+Esta guía configura dos cosas en el Microsoft 365 de **Kenvue**, donde está el Excel de seguimiento
+(sitio `TradeOperationsKenvue`), para el tablero que opera SIACOMEX:
 
-1. **Inicio de sesión con cuenta de Microsoft** para usuarios de SIACOMEX y de Kimberly-Clark (como invitados).
+1. **Inicio de sesión con cuenta de Microsoft** para usuarios de Kenvue / Kimberly-Clark y de SIACOMEX (como invitados).
 2. **Lectura del Excel de seguimiento directamente desde SharePoint**, en solo lectura y solo sobre el sitio del archivo.
 
 **Tiempo estimado:** 45–60 minutos · **Se necesita:** una cuenta con rol **Administrador de aplicaciones en la nube**
 (o Administrador global) en Entra ID, y **Administrador de SharePoint** (o Administrador global) para el paso 8.
 
-> Se crea **una sola aplicación** en Entra ID. La aplicación **no** tiene acceso al resto de SharePoint,
+> **Permisos mínimos:** se crea **una sola aplicación** en Entra ID. La aplicación **no** tiene acceso al resto de SharePoint,
 > al correo ni a OneDrive: solo puede **leer** el sitio donde está el Excel.
 
 ---
@@ -19,7 +20,7 @@ Esta guía configura dos cosas en el Microsoft 365 de **SIACOMEX**:
 
 | Dato | Cómo obtenerlo |
 |---|---|
-| **URL del Excel** | Abra el archivo en Excel de escritorio → **Archivo → Información → Copiar ruta de acceso**. Ej.: `https://siacomex.sharepoint.com/sites/Operaciones/Shared Documents/Kimberly/Seguimiento.xlsx` |
+| **URL del Excel** | `https://kenvue.sharepoint.com/teams/TradeOperationsKenvue/Shared Documents/Docs and Reports/09. LATAM Shipment Reports/LATAM Report - Siacomex/FUP Operaciones LATAM - 4PL Siacomex.xlsx` |
 | **URL del tablero** | `https://dashboardimpor.vercel.app` |
 
 ---
@@ -70,7 +71,7 @@ En la aplicación → **Roles de aplicación → Crear rol de aplicación**:
 En la aplicación → **Permisos de API → Agregar un permiso**:
 1. **Mis API** → `SIACOMEX Torre de Control` → **Permisos delegados** → `Dashboard.Read` → Agregar.
 2. **Microsoft Graph** → **Permisos de aplicación** → `Sites.Selected` → Agregar.
-3. Pulse **Conceder consentimiento de administrador para SIACOMEX** → Sí.
+3. Pulse **Conceder consentimiento de administrador para Kenvue** → Sí.
 
 Ambos permisos deben quedar con estado **Concedido** (marca verde).
 
@@ -89,14 +90,13 @@ En la aplicación → **Certificados y secretos → Nuevo secreto de cliente**:
 2. Recomendado: cree un grupo de seguridad, p. ej. `Torre de control - Lectores`.
 3. **Usuarios y grupos → Agregar usuario o grupo** → seleccione el grupo (o usuarios) → rol **Lector del tablero** → Asignar.
 
-### Usuarios de Kimberly-Clark (invitados)
+### Usuarios de SIACOMEX (invitados)
 
-**Usuarios → Todos los usuarios → Nuevo usuario → Invitar a un usuario externo** → correo corporativo de la persona
-de Kimberly-Clark → Invitar. Luego agréguela al grupo del punto 2.
+Los usuarios de Kenvue se asignan directamente. Para personal de SIACOMEX sin cuenta Kenvue:
+**Usuarios → Todos los usuarios → Nuevo usuario → Invitar a un usuario externo** → correo de SIACOMEX → Invitar.
+Luego agréguelo al grupo del punto 2.
 
-La persona recibe un correo de invitación y, al aceptarla, entra al tablero con **su propia cuenta de Kimberly-Clark**.
-Si la invitación no se puede aceptar, es probable que TI de Kimberly-Clark deba permitir el acceso B2B saliente hacia
-el tenant de SIACOMEX (*Configuración de acceso entre inquilinos*).
+La persona recibe un correo de invitación y, al aceptarla, entra al tablero con **su propia cuenta**.
 
 ## Paso 8 · Permiso de lectura sobre el sitio del Excel (`Sites.Selected`)
 
@@ -106,9 +106,9 @@ Lo hace un **Administrador de SharePoint o global**. Elija una opción:
 ### Opción A — Graph Explorer (navegador)
 1. Abra [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer) e inicie sesión con la cuenta administradora.
    Si lo solicita, dé consentimiento a `Sites.FullControl.All` en **Modificar permisos**.
-2. Obtenga el id del sitio (reemplace `Operaciones` por el sitio real):
+2. Obtenga el id del sitio:
    ```
-   GET https://graph.microsoft.com/v1.0/sites/siacomex.sharepoint.com:/sites/Operaciones
+   GET https://graph.microsoft.com/v1.0/sites/kenvue.sharepoint.com:/teams/TradeOperationsKenvue
    ```
    Copie el campo `id` de la respuesta → `SITE_ID`.
 3. Otorgue lectura a la aplicación:
@@ -125,9 +125,9 @@ Lo hace un **Administrador de SharePoint o global**. Elija una opción:
 
 ### Opción B — PowerShell (PnP)
 ```powershell
-Connect-PnPOnline -Url https://siacomex-admin.sharepoint.com -Interactive -ClientId <ID_DE_SU_APP_PNP>
+Connect-PnPOnline -Url https://kenvue-admin.sharepoint.com -Interactive -ClientId <ID_DE_SU_APP_PNP>
 Grant-PnPAzureADAppSitePermission -AppId <CLIENT_ID> -DisplayName "SIACOMEX Torre de Control" `
-  -Site https://siacomex.sharepoint.com/sites/Operaciones -Permissions Read
+  -Site https://kenvue.sharepoint.com/teams/TradeOperationsKenvue -Permissions Read
 ```
 
 ---
@@ -198,7 +198,7 @@ El backend consulta la versión del archivo cada `CACHE_TTL_SECONDS` (300 s) y *
 |---|---|---|
 | `AADSTS50011` (redirect URI) | La URL del tablero no está en la app | Paso 1: agregar la URL exacta como **SPA** |
 | `AADSTS65001` (consentimiento) | Falta consentimiento del ámbito | Paso 5: **Conceder consentimiento de administrador** |
-| `AADSTS50020` (usuario de otro inquilino) | La persona de Kimberly-Clark no fue invitada | Paso 7: invitarla como usuario externo |
+| `AADSTS50020` (usuario de otro inquilino) | La persona de SIACOMEX no fue invitada | Paso 7: invitarla como usuario externo |
 | `AADSTS50105` (no asignado) | Usuario sin asignación y «Se requiere asignación» = Sí | Paso 7: asignarlo al grupo / rol |
 | Pantalla «Su cuenta no tiene acceso al tablero» | Entró, pero sin el rol `Lector del tablero` | Paso 7: asignar el rol |
 | «Sin permiso para el sitio de SharePoint» | Falta el permiso del paso 8 o el consentimiento de `Sites.Selected` | Pasos 5 y 8 |
